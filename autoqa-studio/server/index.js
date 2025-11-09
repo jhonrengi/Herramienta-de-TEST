@@ -1,4 +1,4 @@
-// Minimal Express server for AutoQA Studio (Demo)
+// Minimal Express server for LogicTest Studio (Demo)
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -48,30 +48,53 @@ function writeTree(root, files) {
 }
 
 app.post('/api/codegen', (req, res) => {
-  const { projectName = 'autoqa-project', frameworkId, patternId, locators = [] } = req.body || {};
+  const { projectName = 'logictest-project', frameworkId, patternId, locators = [] } = req.body || {};
   if (!frameworkId) return res.status(400).json({ error: 'frameworkId requerido' });
 
   const baseDir = path.join(__dirname, 'templates', frameworkId);
   if (!fs.existsSync(baseDir)) return res.status(400).json({ error: 'Template no disponible' });
 
-  const manifestPath = path.join(baseDir, 'manifest.json');
+  const framework = TEMPLATES.frameworks.find(f => f.id === frameworkId) || { id: frameworkId, name: frameworkId };
+  const pattern = TEMPLATES.patterns.find(p => p.id === patternId) || { id: patternId || 'default', name: patternId || 'Default' };
+
+  const candidateDir = patternId ? path.join(baseDir, patternId) : baseDir;
+  const manifestDir = fs.existsSync(candidateDir) ? candidateDir : baseDir;
+
+  const manifestPath = path.join(manifestDir, 'manifest.json');
   if (!fs.existsSync(manifestPath)) return res.status(500).json({ error: 'manifest.json faltante en template' });
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
   const outRoot = path.join(__dirname, '..', 'generated', `${projectName}-${Date.now()}`);
   fs.mkdirSync(outRoot, { recursive: true });
-  const data = { projectName, locatorsJson: JSON.stringify(locators, null, 2) };
+
+  const locatorsMap = Object.fromEntries((locators || []).map(locator => [locator.name, locator]));
+  const formattedMap = JSON.stringify(locatorsMap, null, 2);
+  const formattedList = JSON.stringify(locators, null, 2);
+  const locatorSummary = (locators || [])
+    .map(l => `- ${l.name} → ${l.css || l.xpath || ''}`)
+    .join('\n');
+
+  const data = {
+    projectName,
+    frameworkId,
+    frameworkName: framework.name,
+    patternId: pattern.id,
+    patternName: pattern.name,
+    locatorsJson: formattedMap,
+    locatorsArrayJson: formattedList,
+    locatorSummary
+  };
 
   const files = {};
   for (const file of manifest.files) {
-    const src = path.join(baseDir, file.src);
+    const src = path.join(manifestDir, file.src);
     const dst = file.dst;
     const raw = fs.readFileSync(src, 'utf8');
     files[dst] = render(raw, data);
   }
   writeTree(outRoot, files);
 
-  res.json({ outDir: outRoot, files: Object.keys(files) });
+  res.json({ outDir: outRoot, files: Object.keys(files), framework: framework.name, pattern: pattern.name });
 });
 
 app.post('/api/run', (req, res) => {
@@ -84,4 +107,4 @@ app.post('/api/run', (req, res) => {
 });
 
 const PORT = process.env.PORT || 8787;
-app.listen(PORT, () => console.log('AutoQA Studio server running on :' + PORT));
+app.listen(PORT, () => console.log('LogicTest server running on :' + PORT));

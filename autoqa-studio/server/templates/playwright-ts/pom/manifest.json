@@ -1,0 +1,10 @@
+{
+  "files": [
+    { "src": "package.json.tpl", "dst": "package.json" },
+    { "src": "playwright.config.ts.tpl", "dst": "playwright.config.ts" },
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "locators.json.tpl", "dst": "locators.json" },
+    { "src": "tests/login.spec.ts.tpl", "dst": "tests/login.spec.ts" },
+    { "src": "pages/LoginPage.ts.tpl", "dst": "pages/LoginPage.ts" }
+  ]
+}
