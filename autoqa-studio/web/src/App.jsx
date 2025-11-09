@@ -61,9 +61,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: 'http://localhost:3000/login' })
       })
-      if (!res.ok) throw new Error('No se pudo obtener localizadores')
-      const data = await res.json()
-      setLocators(data.locators || [])
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || 'No se pudo obtener localizadores')
+      setLocators(payload?.locators || [])
+
     } catch (err) {
       setError(err.message || 'Error al extraer localizadores')
     } finally {
@@ -86,9 +87,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectName, frameworkId, patternId, locators })
       })
-      if (!res.ok) throw new Error('No se pudo generar el código')
-      const data = await res.json()
-      setGeneratedInfo(data)
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || 'No se pudo generar el código')
+      if (!payload) throw new Error('Respuesta inválida del servidor')
+      setGeneratedInfo(payload)
     } catch (err) {
       setError(err.message || 'Error al generar código')
     } finally {
@@ -105,9 +107,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ outDir: generatedInfo?.outDir })
       })
-      if (!res.ok) throw new Error('No se pudo ejecutar el plan de pruebas')
-      const data = await res.json()
-      setRunResult(data)
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || 'No se pudo ejecutar el plan de pruebas')
+      if (!payload) throw new Error('Respuesta inválida del servidor')
+      setRunResult(payload)
     } catch (err) {
       setError(err.message || 'Error al ejecutar')
     } finally {
