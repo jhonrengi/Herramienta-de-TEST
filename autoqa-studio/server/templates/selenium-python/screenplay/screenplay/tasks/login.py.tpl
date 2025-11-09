@@ -1,19 +1,24 @@
-from __future__ import annotations
+import json
+from pathlib import Path
+from selenium.webdriver.common.by import By
 
-from ..core.task import define_task
-from ..support.credentials import LoginCredentials
-from ..ui.login_page import LoginPage
+LOCATORS = json.loads((Path(__file__).resolve().parents[2] / 'locators.json').read_text())
 
 
-def login_with(credentials: LoginCredentials):
-    def performer(actor):
-        page = LoginPage(actor.ability('browser').driver)
-        email = page.email_field()
-        email.clear()
-        email.send_keys(credentials.email)
-        password = page.password_field()
-        password.clear()
-        password.send_keys(credentials.password)
-        page.submit_button().click()
+def _selector(key: str) -> tuple[str, str]:
+    locator = LOCATORS[key]
+    if locator.get('css'):
+        return By.CSS_SELECTOR, locator['css']
+    return By.XPATH, locator['xpath']
 
-    return define_task('autentica al usuario con credenciales válidas', performer)
+
+def login_with(email: str, password: str):
+    def task(actor):
+        driver = actor.ability('driver')
+        by, value = _selector('input_email')
+        driver.find_element(by, value).send_keys(email)
+        by, value = _selector('input_password')
+        driver.find_element(by, value).send_keys(password)
+        by, value = _selector('btn_login')
+        driver.find_element(by, value).click()
+    return task

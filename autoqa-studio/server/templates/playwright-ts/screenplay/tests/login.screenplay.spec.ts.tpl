@@ -1,18 +1,16 @@
 import { test, expect } from '@playwright/test';
-import { Actor } from '../screenplay/core/Actor';
+import { Actor } from '../screenplay/actors/Actor';
 import { Navigate } from '../screenplay/tasks/Navigate';
-import { LogIn } from '../screenplay/tasks/Login';
-import { Credentials } from '../screenplay/support/Credentials';
+import { Login } from '../screenplay/tasks/Login';
 
-const LOGIN_URL = 'https://demo.logictest.io/login';
+const QA = { email: 'user@example.com', password: 'secret' };
 
 test.describe('Historias de autenticación', () => {
   test('el actor puede autenticarse', async ({ page }) => {
-    const actor = Actor.withBrowser('QA Analyst', page);
-
+    const actor = new Actor('QA Analyst', { page });
     await actor.attemptsTo(
-      Navigate.toLogin(LOGIN_URL),
-      LogIn.with(Credentials.demoUser())
+      Navigate.to('/login'),
+      Login.withCredentials(QA.email, QA.password)
     );
 
     await expect(page).toHaveURL(/dashboard/);

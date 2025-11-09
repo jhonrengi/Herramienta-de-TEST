@@ -5,10 +5,7 @@
     { "src": "README.md.tpl", "dst": "README.md" },
     { "src": "cypress/fixtures/locators.json.tpl", "dst": "cypress/fixtures/locators.json" },
     { "src": "cypress/e2e/login.screenplay.cy.js.tpl", "dst": "cypress/e2e/login.screenplay.cy.js" },
-    { "src": "cypress/support/screenplay/core/actor.js.tpl", "dst": "cypress/support/screenplay/core/actor.js" },
-    { "src": "cypress/support/screenplay/core/task.js.tpl", "dst": "cypress/support/screenplay/core/task.js" },
-    { "src": "cypress/support/screenplay/support/credentials.js.tpl", "dst": "cypress/support/screenplay/support/credentials.js" },
-    { "src": "cypress/support/screenplay/ui/loginForm.js.tpl", "dst": "cypress/support/screenplay/ui/loginForm.js" },
+    { "src": "cypress/support/screenplay/actors/actor.js.tpl", "dst": "cypress/support/screenplay/actors/actor.js" },
     { "src": "cypress/support/screenplay/tasks/login.js.tpl", "dst": "cypress/support/screenplay/tasks/login.js" },
     { "src": "cypress/support/screenplay/tasks/navigate.js.tpl", "dst": "cypress/support/screenplay/tasks/navigate.js" }
   ]

@@ -1,13 +1,10 @@
-import type { Task } from '../core/Task';
-import type { Actor } from '../core/Actor';
+import type { Page } from '@playwright/test';
+import type { Actor, Task } from '../actors/Actor';
 
-export class Navigate {
-  static toLogin(url: string): Task {
-    return {
-      description: `navega a ${url}`,
-      async performAs(actor: Actor) {
-        await actor.page.goto(url);
-      }
-    };
+const page = (actor: Actor): Page => actor.ability('page');
+
+export const Navigate = {
+  to: (path: string): Task => async actor => {
+    await page(actor).goto(path);
   }
-}
+};

@@ -1,11 +1,5 @@
-from __future__ import annotations
-
-from ..core.task import define_task
-from ..ui.login_page import LoginPage
-
-
-def navigate_to_login():
-    return define_task(
-        "navega a la pantalla de login",
-        lambda actor: LoginPage(actor.ability('browser').driver).open()
-    )
+def navigate_to(path: str):
+    def task(actor):
+        driver = actor.ability('driver')
+        driver.get(f'http://localhost:3000{path}')
+    return task

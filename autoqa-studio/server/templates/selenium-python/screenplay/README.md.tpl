@@ -1,27 +1,16 @@
 # {{projectName}}
 
-Proyecto generado con LogicTest para **{{frameworkName}}** usando el patrón **{{patternName}}**.
+Proyecto Screenplay generado con LogicTest para **{{frameworkName}}**.
 
-## Estructura Screenplay
-
-```
-├── screenplay
-│   ├── core         # Actor + contrato de tareas
-│   ├── abilities    # Habilidades que encapsulan recursos (WebDriver)
-│   ├── support      # Datos compartidos como credenciales
-│   ├── tasks        # Acciones reutilizables
-│   └── ui           # Page Objects livianos construidos desde locators.json
-├── tests            # Escenarios de usuario con Pytest
-└── locators.json    # Mapa de localizadores detectados por LogicTest
-```
-
-## Ejecutar pruebas
+## Ejecución
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 pytest
 ```
 
-## Localizadores disponibles
+## Localizadores
 
 {{locatorSummary}}

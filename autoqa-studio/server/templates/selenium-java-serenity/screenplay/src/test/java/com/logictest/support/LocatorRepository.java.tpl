@@ -1,8 +1,6 @@
 package com.logictest.support;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import net.serenitybdd.screenplay.targets.Target;
 import org.openqa.selenium.By;
 
 import java.io.IOException;
@@ -10,35 +8,31 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Map;
 
-public final class LocatorRepository {
-    private record LocatorDefinition(String css, String xpath) {
-        Target asTarget(String description) {
-            if (css != null && !css.isBlank()) {
-                return Target.the(description).located(By.cssSelector(css));
-            }
-            return Target.the(description).located(By.xpath(xpath));
-        }
-    }
+public class LocatorRepository {
+    private static final Map<String, Map<String, String>> LOCATORS = load();
 
-    private static final Map<String, LocatorDefinition> LOCATORS = load();
-
-    private LocatorRepository() {}
-
-    private static Map<String, LocatorDefinition> load() {
+    private static Map<String, Map<String, String>> load() {
         try {
             byte[] data = Files.readAllBytes(Paths.get("src/test/resources/locators.json"));
-            ObjectMapper mapper = new ObjectMapper();
-            return mapper.readValue(data, new TypeReference<>() {});
+            return new ObjectMapper().readValue(data, Map.class);
         } catch (IOException e) {
             throw new IllegalStateException("No se pudo cargar locators.json", e);
         }
     }
 
-    public static Target target(String key, String description) {
-        LocatorDefinition locator = LOCATORS.get(key);
+    public static By by(String key) {
+        Map<String, String> locator = LOCATORS.get(key);
         if (locator == null) {
             throw new IllegalArgumentException("Locator no encontrado: " + key);
         }
-        return locator.asTarget(description);
+        if (locator.get("css") != null && !locator.get("css").isEmpty()) {
+            return By.cssSelector(locator.get("css"));
+        }
+        return By.xpath(locator.get("xpath"));
+    }
+
+    public static String css(String key) {
+        Map<String, String> locator = LOCATORS.get(key);
+        return locator.getOrDefault("css", locator.getOrDefault("xpath", ""));
     }
 }
