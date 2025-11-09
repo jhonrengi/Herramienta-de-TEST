@@ -1,9 +1,0 @@
-{
-  "name": "{{projectName}}",
-  "private": true,
-  "devDependencies": {
-    "@playwright/test": "^1.48.2",
-    "typescript": "^5.6.3"
-  },
-  "scripts": { "test": "playwright test" }
-}

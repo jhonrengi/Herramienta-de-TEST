@@ -1,98 +1,283 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import './App.css'
 
 const API = 'http://localhost:8787'
 
-export default function App(){
-  const [templates, setTemplates] = useState({frameworks:[], patterns:[]})
+const statusCopy = {
+  idle: 'Listo para empezar',
+  recording: 'Extrayendo localizadores…',
+  generating: 'Generando proyecto…',
+  running: 'Ejecutando pruebas…'
+}
+
+export default function App() {
+  const [templates, setTemplates] = useState({ frameworks: [], patterns: [] })
   const [locators, setLocators] = useState([])
-  const [frameworkId, setFrameworkId] = useState('playwright-ts')
-  const [patternId, setPatternId] = useState('pom')
-  const [projectName, setProjectName] = useState('mi-proyecto-autoqa')
+  const [frameworkId, setFrameworkId] = useState('')
+  const [patternId, setPatternId] = useState('')
+  const [projectName, setProjectName] = useState('logictest-demo')
+  const [status, setStatus] = useState('idle')
+  const [error, setError] = useState('')
+  const [generatedInfo, setGeneratedInfo] = useState(null)
   const [runResult, setRunResult] = useState(null)
 
-  useEffect(()=>{
-    fetch(`${API}/api/templates`).then(r=>r.json()).then(setTemplates).catch(()=>{})
-  },[])
+  useEffect(() => {
+    let isMounted = true
+    fetch(`${API}/api/templates`)
+      .then(res => res.json())
+      .then(data => {
+        if (!isMounted) return
+        setTemplates(data)
+        if (!data.frameworks.find(f => f.id === frameworkId)) {
+          setFrameworkId(data.frameworks[0]?.id ?? '')
+        }
+        if (!data.patterns.find(p => p.id === patternId)) {
+          setPatternId(data.patterns[0]?.id ?? '')
+        }
+      })
+      .catch(() => {
+        if (isMounted) setError('No fue posible cargar los templates disponibles. Verifica que el servidor esté encendido.')
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
-  const mockRecord = async ()=>{
-    const res = await fetch(`${API}/api/locators/extract`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ url: 'http://localhost:3000/login' })
-    })
-    const data = await res.json()
-    setLocators(data.locators || [])
+  const selectedFramework = useMemo(
+    () => templates.frameworks.find(f => f.id === frameworkId),
+    [templates.frameworks, frameworkId]
+  )
+  const selectedPattern = useMemo(
+    () => templates.patterns.find(p => p.id === patternId),
+    [templates.patterns, patternId]
+  )
+
+  const mockRecord = async () => {
+    setStatus('recording')
+    setError('')
+    try {
+      const res = await fetch(`${API}/api/locators/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'http://localhost:3000/login' })
+      })
+      if (!res.ok) throw new Error('No se pudo obtener localizadores')
+      const data = await res.json()
+      setLocators(data.locators || [])
+    } catch (err) {
+      setError(err.message || 'Error al extraer localizadores')
+    } finally {
+      setStatus('idle')
+    }
   }
 
-  const generate = async ()=>{
-    const res = await fetch(`${API}/api/codegen`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ projectName, frameworkId, patternId, locators })
-    })
-    const data = await res.json()
-    alert('Código generado en: ' + data.outDir + '\n' + (data.files||[]).join('\n'))
+  const generate = async () => {
+    if (!locators.length) {
+      setError('Genera primero los localizadores para crear el proyecto.')
+      return
+    }
+    setStatus('generating')
+    setError('')
+    setGeneratedInfo(null)
+    setRunResult(null)
+    try {
+      const res = await fetch(`${API}/api/codegen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectName, frameworkId, patternId, locators })
+      })
+      if (!res.ok) throw new Error('No se pudo generar el código')
+      const data = await res.json()
+      setGeneratedInfo(data)
+    } catch (err) {
+      setError(err.message || 'Error al generar código')
+    } finally {
+      setStatus('idle')
+    }
   }
 
-  const run = async ()=>{
-    const res = await fetch(`${API}/api/run`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({})
-    })
-    const data = await res.json()
-    setRunResult(data)
+  const run = async () => {
+    setStatus('running')
+    setError('')
+    try {
+      const res = await fetch(`${API}/api/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outDir: generatedInfo?.outDir })
+      })
+      if (!res.ok) throw new Error('No se pudo ejecutar el plan de pruebas')
+      const data = await res.json()
+      setRunResult(data)
+    } catch (err) {
+      setError(err.message || 'Error al ejecutar')
+    } finally {
+      setStatus('idle')
+    }
   }
+
+  const locatorChips = locators.map(locator => (
+    <span key={locator.name} className="chip">
+      <span className="chip-title">{locator.name}</span>
+      <span className="chip-sub">{locator.css || locator.xpath}</span>
+    </span>
+  ))
 
   return (
-    <div style={{fontFamily:'system-ui, sans-serif', padding:20}}>
-      <h1>AutoQA Studio (Demo)</h1>
-      <p>Graba/extrae localizadores, elige framework, genera código y ejecuta.</p>
-
-      <section style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20}}>
-        <div style={{border:'1px solid #ddd', borderRadius:12, padding:16}}>
-          <h2>1) Record / Extract</h2>
-          <button onClick={mockRecord}>Simular grabación y extracción</button>
-          <ul>
-            {locators.map(l=><li key={l.name}><b>{l.name}</b> — css: <code>{l.css}</code> — score {Math.round(l.score*100)}%</li>)}
-          </ul>
+    <div className="app-shell">
+      <header className="hero">
+        <div className="hero-content">
+          <span className="brand-pill">LogicTest</span>
+          <h1>Genera suites end-to-end en segundos</h1>
+          <p>Graba interacciones, elige tu stack favorito y obtén un proyecto listo para ejecutar.</p>
         </div>
-
-        <div style={{border:'1px solid #ddd', borderRadius:12, padding:16}}>
-          <h2>2) Elegir stack</h2>
-          <label>Nombre del proyecto<br/>
-            <input value={projectName} onChange={e=>setProjectName(e.target.value)}/>
-          </label>
-          <div style={{marginTop:10}}>
-            <label>Framework<br/>
-              <select value={frameworkId} onChange={e=>setFrameworkId(e.target.value)}>
-                {templates.frameworks.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-            </label>
-          </div>
-          <div style={{marginTop:10}}>
-            <label>Patrón<br/>
-              <select value={patternId} onChange={e=>setPatternId(e.target.value)}>
-                {templates.patterns.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-          </div>
-          <div style={{marginTop:10}}>
-            <button onClick={generate} disabled={!locators.length}>Generar código</button>
-          </div>
+        <div className="status-card">
+          <span className="status-label">Estado</span>
+          <strong>{statusCopy[status]}</strong>
+          {selectedFramework && selectedPattern && (
+            <p className="status-meta">
+              <span>{selectedFramework.name}</span>
+              <span className="separator">•</span>
+              <span>{selectedPattern.name}</span>
+            </p>
+          )}
         </div>
-      </section>
+      </header>
 
-      <section style={{border:'1px solid #ddd', borderRadius:12, padding:16, marginTop:20}}>
-        <h2>3) Ejecutar</h2>
-        <button onClick={run}>Ejecutar pruebas (mock)</button>
-        {runResult && (
-          <div style={{marginTop:10}}>
-            <div>Estado: <b>{runResult.status}</b></div>
-            <div>Resumen: {runResult.summary.total} total / {runResult.summary.passed} ok / {runResult.summary.failed} fail</div>
-          </div>
-        )}
-      </section>
+      <main className="content">
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <section className="step-grid">
+          <article className="card">
+            <div className="card-header">
+              <span className="step-badge">Paso 1</span>
+              <h2>Extrae los localizadores</h2>
+              <p>Simula la grabación de una sesión para obtener localizadores con calificación automática.</p>
+            </div>
+            <button className="primary" onClick={mockRecord} disabled={status === 'recording'}>
+              {status === 'recording' ? 'Analizando…' : 'Simular extracción'}
+            </button>
+            <div className="locators-wrapper">
+              {locators.length ? locatorChips : <span className="empty">Aún no se han generado localizadores.</span>}
+            </div>
+          </article>
+
+          <article className="card">
+            <div className="card-header">
+              <span className="step-badge">Paso 2</span>
+              <h2>Define tu stack</h2>
+              <p>Selecciona framework, patrón de diseño y nombra el proyecto. LogicTest generará la estructura completa.</p>
+            </div>
+
+            <label className="field">
+              <span>Nombre del proyecto</span>
+              <input
+                value={projectName}
+                onChange={e => setProjectName(e.target.value)}
+                placeholder="logictest-e2e"
+              />
+            </label>
+
+            <div className="option-block">
+              <span className="option-title">Framework</span>
+              <div className="option-grid">
+                {templates.frameworks.map(framework => (
+                  <button
+                    key={framework.id}
+                    type="button"
+                    className={`option-tile ${framework.id === frameworkId ? 'active' : ''}`}
+                    onClick={() => setFrameworkId(framework.id)}
+                  >
+                    <strong>{framework.name}</strong>
+                    <span className="option-sub">Plantilla mantenida por LogicTest</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="option-block">
+              <span className="option-title">Patrón</span>
+              <div className="option-grid compact">
+                {templates.patterns.map(pattern => (
+                  <button
+                    key={pattern.id}
+                    type="button"
+                    className={`option-tile ${pattern.id === patternId ? 'active' : ''}`}
+                    onClick={() => setPatternId(pattern.id)}
+                  >
+                    <strong>{pattern.name}</strong>
+                    <span className="option-sub">Auto-generación del esqueleto</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              className="primary"
+              onClick={generate}
+              disabled={status === 'generating' || !frameworkId || !patternId || !locators.length}
+            >
+              {status === 'generating' ? 'Generando…' : 'Generar proyecto'}
+            </button>
+
+            {generatedInfo && (
+              <div className="result-panel">
+                <h3>Proyecto creado</h3>
+                <p className="result-meta">
+                  <span>{generatedInfo.framework}</span>
+                  <span className="separator">•</span>
+                  <span>{generatedInfo.pattern}</span>
+                </p>
+                <p className="result-path">Ruta: {generatedInfo.outDir}</p>
+                <details>
+                  <summary>Ver archivos generados</summary>
+                  <ul>
+                    {generatedInfo.files?.map(file => (
+                      <li key={file}>{file}</li>
+                    ))}
+                  </ul>
+                </details>
+              </div>
+            )}
+          </article>
+
+          <article className="card">
+            <div className="card-header">
+              <span className="step-badge">Paso 3</span>
+              <h2>Ejecuta tu suite</h2>
+              <p>Lanza un run simulado que imita la ejecución en tu CI/CD para validar el flujo completo.</p>
+            </div>
+            <button className="primary" onClick={run} disabled={status === 'running' || !generatedInfo}>
+              {status === 'running' ? 'Ejecutando…' : 'Ejecutar pruebas mock'}
+            </button>
+
+            {runResult && (
+              <div className="run-summary">
+                <h3>Resultado</h3>
+                <div className="metrics">
+                  <span className="metric">
+                    <strong>{runResult.summary.passed}</strong>
+                    <span>Aprobadas</span>
+                  </span>
+                  <span className="metric">
+                    <strong>{runResult.summary.failed}</strong>
+                    <span>Fallidas</span>
+                  </span>
+                  <span className="metric">
+                    <strong>{runResult.summary.total}</strong>
+                    <span>Total</span>
+                  </span>
+                </div>
+                <p>Duración estimada: {runResult.summary.durationSec} s</p>
+              </div>
+            )}
+          </article>
+        </section>
+      </main>
+
+      <footer className="footer">
+        <span>LogicTest Studio · prototipo interactivo</span>
+        <span>Listo para integrarse con tu pipeline CI</span>
+      </footer>
     </div>
   )
 }

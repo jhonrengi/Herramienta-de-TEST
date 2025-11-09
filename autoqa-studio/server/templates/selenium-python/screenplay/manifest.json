@@ -1,0 +1,11 @@
+{
+  "files": [
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "requirements.txt.tpl", "dst": "requirements.txt" },
+    { "src": "locators.json.tpl", "dst": "locators.json" },
+    { "src": "screenplay/actors/actor.py.tpl", "dst": "screenplay/actors/actor.py" },
+    { "src": "screenplay/tasks/login.py.tpl", "dst": "screenplay/tasks/login.py" },
+    { "src": "screenplay/tasks/navigate.py.tpl", "dst": "screenplay/tasks/navigate.py" },
+    { "src": "tests/test_login_screenplay.py.tpl", "dst": "tests/test_login_screenplay.py" }
+  ]
+}
