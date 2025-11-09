@@ -1,0 +1,10 @@
+{
+  "files": [
+    { "src": "pom.xml.tpl", "dst": "pom.xml" },
+    { "src": "serenity.properties.tpl", "dst": "serenity.properties" },
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "src/test/java/com/logictest/tests/LoginTest.java.tpl", "dst": "src/test/java/com/logictest/tests/LoginTest.java" },
+    { "src": "src/test/java/com/logictest/pages/LoginPage.java.tpl", "dst": "src/test/java/com/logictest/pages/LoginPage.java" },
+    { "src": "src/test/resources/locators.json.tpl", "dst": "src/test/resources/locators.json" }
+  ]
+}
