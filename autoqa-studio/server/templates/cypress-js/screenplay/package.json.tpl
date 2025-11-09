@@ -1,0 +1,11 @@
+{
+  "name": "{{projectName}}",
+  "private": true,
+  "scripts": {
+    "test": "cypress run",
+    "test:open": "cypress open"
+  },
+  "devDependencies": {
+    "cypress": "^13.14.1"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "files": [
+    { "src": "package.json.tpl", "dst": "package.json" },
+    { "src": "playwright.config.ts.tpl", "dst": "playwright.config.ts" },
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "locators.json.tpl", "dst": "locators.json" },
+    { "src": "tests/login.screenplay.spec.ts.tpl", "dst": "tests/login.screenplay.spec.ts" },
+    { "src": "screenplay/core/Actor.ts.tpl", "dst": "screenplay/core/Actor.ts" },
+    { "src": "screenplay/core/Task.ts.tpl", "dst": "screenplay/core/Task.ts" },
+    { "src": "screenplay/support/Credentials.ts.tpl", "dst": "screenplay/support/Credentials.ts" },
+    { "src": "screenplay/ui/LoginForm.ts.tpl", "dst": "screenplay/ui/LoginForm.ts" },
+    { "src": "screenplay/tasks/Login.ts.tpl", "dst": "screenplay/tasks/Login.ts" },
+    { "src": "screenplay/tasks/Navigate.ts.tpl", "dst": "screenplay/tasks/Navigate.ts" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "files": [
+    { "src": "pom.xml.tpl", "dst": "pom.xml" },
+    { "src": "serenity.properties.tpl", "dst": "serenity.properties" },
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "src/test/resources/locators.json.tpl", "dst": "src/test/resources/locators.json" },
+    { "src": "src/test/java/com/logictest/features/LoginStory.java.tpl", "dst": "src/test/java/com/logictest/features/LoginStory.java" },
+    { "src": "src/test/java/com/logictest/model/Credentials.java.tpl", "dst": "src/test/java/com/logictest/model/Credentials.java" },
+    { "src": "src/test/java/com/logictest/tasks/Authenticate.java.tpl", "dst": "src/test/java/com/logictest/tasks/Authenticate.java" },
+    { "src": "src/test/java/com/logictest/tasks/NavigateToLogin.java.tpl", "dst": "src/test/java/com/logictest/tasks/NavigateToLogin.java" },
+    { "src": "src/test/java/com/logictest/ui/LoginPage.java.tpl", "dst": "src/test/java/com/logictest/ui/LoginPage.java" },
+    { "src": "src/test/java/com/logictest/support/LocatorRepository.java.tpl", "dst": "src/test/java/com/logictest/support/LocatorRepository.java" }
+  ]
+}

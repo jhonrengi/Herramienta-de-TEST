@@ -1,0 +1,9 @@
+{
+  "files": [
+    { "src": "package.json.tpl", "dst": "package.json" },
+    { "src": "cypress.config.js.tpl", "dst": "cypress.config.js" },
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "cypress/fixtures/locators.json.tpl", "dst": "cypress/fixtures/locators.json" },
+    { "src": "cypress/e2e/login.cy.js.tpl", "dst": "cypress/e2e/login.cy.js" }
+  ]
+}

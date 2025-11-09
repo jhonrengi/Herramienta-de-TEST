@@ -1,0 +1,15 @@
+{
+  "files": [
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "requirements.txt.tpl", "dst": "requirements.txt" },
+    { "src": "locators.json.tpl", "dst": "locators.json" },
+    { "src": "screenplay/core/actor.py.tpl", "dst": "screenplay/core/actor.py" },
+    { "src": "screenplay/core/task.py.tpl", "dst": "screenplay/core/task.py" },
+    { "src": "screenplay/abilities/browser.py.tpl", "dst": "screenplay/abilities/browser.py" },
+    { "src": "screenplay/support/credentials.py.tpl", "dst": "screenplay/support/credentials.py" },
+    { "src": "screenplay/ui/login_page.py.tpl", "dst": "screenplay/ui/login_page.py" },
+    { "src": "screenplay/tasks/login.py.tpl", "dst": "screenplay/tasks/login.py" },
+    { "src": "screenplay/tasks/navigate.py.tpl", "dst": "screenplay/tasks/navigate.py" },
+    { "src": "tests/test_login_screenplay.py.tpl", "dst": "tests/test_login_screenplay.py" }
+  ]
+}

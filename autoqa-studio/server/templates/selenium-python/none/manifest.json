@@ -1,0 +1,8 @@
+{
+  "files": [
+    { "src": "README.md.tpl", "dst": "README.md" },
+    { "src": "requirements.txt.tpl", "dst": "requirements.txt" },
+    { "src": "locators.json.tpl", "dst": "locators.json" },
+    { "src": "tests/test_login.py.tpl", "dst": "tests/test_login.py" }
+  ]
+}
