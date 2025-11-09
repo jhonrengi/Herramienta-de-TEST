@@ -1,0 +1,20 @@
+[
+  {
+    "name": "btn_login",
+    "css": "#login",
+    "xpath": "//*[@id=\"login\"]",
+    "score": 0.92
+  },
+  {
+    "name": "input_email",
+    "css": "input[name=\"email\"]",
+    "xpath": "//input[@name=\"email\"]",
+    "score": 0.88
+  },
+  {
+    "name": "input_password",
+    "css": "input[type=\"password\"]",
+    "xpath": "//input[@type=\"password\"]",
+    "score": 0.86
+  }
+]
