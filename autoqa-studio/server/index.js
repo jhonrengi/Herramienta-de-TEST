@@ -47,6 +47,7 @@ function writeTree(root, files) {
 }
 
 app.post('/api/codegen', (req, res) => {
+
   try {
     const { projectName = 'logictest-project', frameworkId, patternId, locators = [] } = req.body || {};
     if (!frameworkId) {
@@ -121,6 +122,7 @@ app.post('/api/codegen', (req, res) => {
     console.error('Error generando proyecto', error);
     return res.status(500).json({ error: 'Error interno al generar el proyecto' });
   }
+
 });
 
 app.post('/api/run', (req, res) => {

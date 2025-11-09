@@ -64,6 +64,7 @@ export default function App() {
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || 'No se pudo obtener localizadores')
       setLocators(payload?.locators || [])
+
     } catch (err) {
       setError(err.message || 'Error al extraer localizadores')
     } finally {
