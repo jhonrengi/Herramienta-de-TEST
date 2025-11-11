@@ -1,10 +1,11 @@
 import { Actor } from '../support/screenplay/actors/actor';
 import { Navigate } from '../support/screenplay/tasks/navigate';
 import { Login } from '../support/screenplay/tasks/login';
+import { getByChain } from '../support/locator';
 
 const pageAbility = {
   visit: path => cy.visit(path),
-  get: selector => cy.get(selector)
+  locate: candidate => getByChain(candidate)
 };
 
 describe('Historias de autenticación', () => {

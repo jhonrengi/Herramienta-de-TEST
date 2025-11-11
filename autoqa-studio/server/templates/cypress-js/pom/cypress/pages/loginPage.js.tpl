@@ -1,4 +1,5 @@
 import locators from '../fixtures/locators.json';
+import { getByChain } from '../support/locator';
 
 export class LoginPage {
   visit() {
@@ -6,11 +7,11 @@ export class LoginPage {
   }
 
   fillCredentials(email, password) {
-    cy.get(locators.input_email.css || locators.input_email.xpath).type(email);
-    cy.get(locators.input_password.css || locators.input_password.xpath).type(password);
+    getByChain(locators.input_email).type(email);
+    getByChain(locators.input_password).type(password);
   }
 
   submit() {
-    cy.get(locators.btn_login.css || locators.btn_login.xpath).click();
+    getByChain(locators.btn_login).click();
   }
 }
