@@ -1,6 +1,6 @@
 package com.logictest.ui;
 
-import com.logictest.support.LocatorRepository;
+import com.logictest.utils.LocatorRepository;
 import net.serenitybdd.screenplay.targets.Target;
 
 public final class LoginPage {

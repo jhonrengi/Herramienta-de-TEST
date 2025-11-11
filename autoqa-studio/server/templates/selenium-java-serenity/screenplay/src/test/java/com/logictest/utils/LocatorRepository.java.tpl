@@ -1,6 +1,7 @@
-package com.logictest.support;
+package com.logictest.utils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import net.serenitybdd.screenplay.targets.Target;
 import org.openqa.selenium.By;
 
 import java.io.IOException;
@@ -20,19 +21,28 @@ public class LocatorRepository {
         }
     }
 
-    public static By by(String key) {
+    private static Map<String, String> locatorFor(String key) {
         Map<String, String> locator = LOCATORS.get(key);
         if (locator == null) {
             throw new IllegalArgumentException("Locator no encontrado: " + key);
         }
+        return locator;
+    }
+
+    public static By by(String key) {
+        Map<String, String> locator = locatorFor(key);
         if (locator.get("css") != null && !locator.get("css").isEmpty()) {
             return By.cssSelector(locator.get("css"));
         }
         return By.xpath(locator.get("xpath"));
     }
 
+    public static Target target(String key, String description) {
+        return Target.the(description).located(by(key));
+    }
+
     public static String css(String key) {
-        Map<String, String> locator = LOCATORS.get(key);
+        Map<String, String> locator = locatorFor(key);
         return locator.getOrDefault("css", locator.getOrDefault("xpath", ""));
     }
 }
