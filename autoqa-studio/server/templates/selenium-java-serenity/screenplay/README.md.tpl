@@ -1,13 +1,41 @@
 # {{projectName}}
 
-Proyecto Screenplay generado con LogicTest para **{{frameworkName}}**.
+Proyecto generado con LogicTest usando **{{frameworkName}}** y el patrón **Screenplay**.
 
-## Ejecutar
+## Estructura principal
 
-```bash
-mvn clean verify
+```
+├── build.gradle
+├── serenity.properties
+├── src
+│   └── test
+│       ├── java
+│       │   └── com
+│       │       └── logictest
+│       │           ├── model
+│       │           ├── questions
+│       │           ├── runners
+│       │           ├── stepdefinitions
+│       │           ├── tasks
+│       │           ├── ui
+│       │           └── utils
+│       └── resources
+│           ├── features
+│           └── locators.json
 ```
 
-## Localizadores
+## Ejecutar las pruebas
+
+```bash
+./gradlew test
+```
+
+Si no cuentas con el wrapper de Gradle puedes usar:
+
+```bash
+gradle test
+```
+
+## Localizadores generados
 
 {{locatorSummary}}
