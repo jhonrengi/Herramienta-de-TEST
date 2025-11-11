@@ -1,4 +1,9 @@
 // Minimal Express server for LogicTest Studio (Demo)
+try {
+  require('dotenv').config();
+} catch (error) {
+  console.warn('dotenv no disponible, se continúa con configuración por defecto.');
+}
 const express = require('express');
 const cors = require('cors');
 
