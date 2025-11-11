@@ -1,26 +1,13 @@
 // Minimal Express server for LogicTest Studio (Demo)
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 
-const TEMPLATES = {
-  frameworks: [
-    { id: 'playwright-ts', name: 'Playwright + TypeScript' },
-    { id: 'cypress-js', name: 'Cypress + JavaScript' },
-    { id: 'selenium-java-serenity', name: 'Selenium + Serenity BDD (Java)' },
-    { id: 'selenium-python', name: 'Selenium + Python' }
-  ],
-  patterns: [
-    { id: 'pom', name: 'Page Object Model' },
-    { id: 'screenplay', name: 'Screenplay' },
-    { id: 'none', name: 'Sin patrón' }
-  ]
-};
+const { TEMPLATES, generateProject } = require('./services/codegenService');
+const aiRoutes = require('./aiRoutes');
 
 function normalizeKey(value) {
   return (value || '').toString().trim().toLowerCase();
@@ -37,6 +24,7 @@ function resolveTemplateEntry(entries, requested) {
 }
 
 app.get('/api/templates', (_req, res) => res.json(TEMPLATES));
+app.use('/api', aiRoutes);
 
 app.post('/api/locators/extract', (req, res) => {
   const { url } = req.body || {};
@@ -48,19 +36,8 @@ app.post('/api/locators/extract', (req, res) => {
   res.json({ source: url ? { type: 'url', url } : { type: 'html' }, locators: sample });
 });
 
-function render(template, data) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => data[k] ?? '');
-}
-
-function writeTree(root, files) {
-  for (const [rel, contents] of Object.entries(files)) {
-    const full = path.join(root, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, contents);
-  }
-}
-
 app.post('/api/codegen', (req, res) => {
+  const { projectName = 'logictest-project', frameworkId, patternId, locators = [] } = req.body || {};
 
   try {
     const { projectName = 'logictest-project', frameworkId, patternId, locators = [] } = req.body || {};
@@ -147,9 +124,12 @@ app.post('/api/codegen', (req, res) => {
     return res.json({ outDir: outRoot, files: Object.keys(files), framework: framework.name, pattern: pattern.name });
   } catch (error) {
     console.error('Error generando proyecto', error);
-    return res.status(500).json({ error: 'Error interno al generar el proyecto' });
+    const message = error.message || 'Error interno al generar el proyecto';
+    if (/Template no disponible|El patrón|frameworkId requerido/i.test(message)) {
+      return res.status(400).json({ error: message });
+    }
+    return res.status(500).json({ error: message });
   }
-
 });
 
 app.post('/api/run', (req, res) => {
