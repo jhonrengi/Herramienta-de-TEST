@@ -4,6 +4,7 @@
     { "src": "playwright.config.ts.tpl", "dst": "playwright.config.ts" },
     { "src": "README.md.tpl", "dst": "README.md" },
     { "src": "locators.json.tpl", "dst": "locators.json" },
+    { "src": "utils/locator.ts.tpl", "dst": "utils/locator.ts" },
     { "src": "tests/login.spec.ts.tpl", "dst": "tests/login.spec.ts" }
   ]
 }

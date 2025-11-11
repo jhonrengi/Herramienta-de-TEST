@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import selectors from '../locators.json';
+import { getLocator } from '../utils/locator';
 
 const credentials = {
   email: 'user@example.com',
@@ -8,8 +9,13 @@ const credentials = {
 
 test('login directo sin patrón', async ({ page }) => {
   await page.goto('/login');
-  await page.fill(selectors.input_email.css ?? selectors.input_email.xpath, credentials.email);
-  await page.fill(selectors.input_password.css ?? selectors.input_password.xpath, credentials.password);
-  await page.click(selectors.btn_login.css ?? selectors.btn_login.xpath);
+  const emailField = await getLocator(page, selectors.input_email);
+  await emailField.fill(credentials.email);
+
+  const passwordField = await getLocator(page, selectors.input_password);
+  await passwordField.fill(credentials.password);
+
+  const loginButton = await getLocator(page, selectors.btn_login);
+  await loginButton.click();
   await expect(page).toHaveURL(/dashboard/);
 });
