@@ -22,6 +22,20 @@ const TEMPLATES = {
   ]
 };
 
+function normalizeKey(value) {
+  return (value || '').toString().trim().toLowerCase();
+}
+
+function resolveTemplateEntry(entries, requested) {
+  if (!requested) return null;
+  const byId = entries.find(entry => entry.id === requested);
+  if (byId) {
+    return byId;
+  }
+  const normalized = normalizeKey(requested);
+  return entries.find(entry => normalizeKey(entry.name) === normalized) || null;
+}
+
 app.get('/api/templates', (_req, res) => res.json(TEMPLATES));
 
 app.post('/api/locators/extract', (req, res) => {
@@ -54,30 +68,43 @@ app.post('/api/codegen', (req, res) => {
       return res.status(400).json({ error: 'frameworkId requerido' });
     }
 
-    const baseDir = path.join(__dirname, 'templates', frameworkId);
-    if (!fs.existsSync(baseDir)) {
+    const frameworkEntry = resolveTemplateEntry(TEMPLATES.frameworks, frameworkId);
+    if (!frameworkEntry) {
       return res.status(400).json({ error: `Template no disponible para ${frameworkId}` });
     }
 
-    const framework = TEMPLATES.frameworks.find(f => f.id === frameworkId) || { id: frameworkId, name: frameworkId };
-    const pattern = TEMPLATES.patterns.find(p => p.id === patternId) || { id: patternId || 'default', name: patternId || 'Default' };
+    const baseDir = path.join(__dirname, 'templates', frameworkEntry.id);
+    if (!fs.existsSync(baseDir)) {
+      return res.status(400).json({ error: `Template no disponible para ${frameworkEntry.name}` });
+    }
 
-    const candidateDir = patternId ? path.join(baseDir, patternId) : baseDir;
-    if (patternId && !fs.existsSync(candidateDir)) {
-      return res.status(400).json({ error: `El patrón ${patternId} no está disponible para ${frameworkId}` });
+    const patternEntry = resolveTemplateEntry(TEMPLATES.patterns, patternId);
+    if (patternId && !patternEntry) {
+      return res.status(400).json({ error: `El patrón ${patternId} no está disponible para ${frameworkEntry.name}` });
+    }
+
+    const framework = frameworkEntry;
+
+    const pattern = patternEntry || (patternId
+      ? { id: patternId, name: patternId }
+      : { id: 'default', name: 'Default' });
+
+    const candidateDir = patternEntry ? path.join(baseDir, patternEntry.id) : baseDir;
+    if (patternEntry && !fs.existsSync(candidateDir)) {
+      return res.status(400).json({ error: `El patrón ${patternId} no está disponible para ${framework.name}` });
     }
 
     const manifestDir = fs.existsSync(candidateDir) ? candidateDir : baseDir;
     const manifestPath = path.join(manifestDir, 'manifest.json');
     if (!fs.existsSync(manifestPath)) {
-      return res.status(500).json({ error: `manifest.json faltante en template ${frameworkId}/${pattern.id}` });
+      return res.status(500).json({ error: `manifest.json faltante en template ${framework.id}/${pattern.id}` });
     }
 
     let manifest;
     try {
       manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     } catch (err) {
-      return res.status(500).json({ error: `manifest.json inválido en ${frameworkId}/${pattern.id}` });
+      return res.status(500).json({ error: `manifest.json inválido en ${framework.id}/${pattern.id}` });
     }
 
     for (const file of manifest.files) {
@@ -99,7 +126,7 @@ app.post('/api/codegen', (req, res) => {
 
     const data = {
       projectName,
-      frameworkId,
+      frameworkId: framework.id,
       frameworkName: framework.name,
       patternId: pattern.id,
       patternName: pattern.name,
