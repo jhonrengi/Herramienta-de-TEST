@@ -1,28 +1,9 @@
 const express = require('express');
-let fetchImpl;
-try {
-  const nodeFetch = require('node-fetch');
-  fetchImpl = nodeFetch.default || nodeFetch;
-} catch (error) {
-  if (typeof global.fetch === 'function') {
-    console.warn('node-fetch no disponible, se usa fetch nativo.');
-    fetchImpl = (...args) => global.fetch(...args);
-  } else {
-    throw error;
-  }
-}
-const fetch = (...args) => fetchImpl(...args);
-let cheerio;
-try {
-  cheerio = require('cheerio');
-} catch (error) {
-  console.warn('cheerio no disponible, se usa un parser mínimo.');
-  cheerio = { load: createMiniCheerio };
-}
+const fetch = require('node-fetch');
+const cheerio = require('cheerio');
 const { performance } = require('perf_hooks');
 
-const { saveJson, readJsonSafe } = require('./data/utils');
-const { generateProject } = require('./services/codegenService');
+const { readJsonSafe } = require('./data/utils');
 
 const router = express.Router();
 
@@ -45,223 +26,6 @@ const INTERACTIVE_TAGS = new Set([
   'summary',
   'details'
 ]);
-
-const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
-
-function parseAttributes(attrString = '') {
-  const attribs = {};
-  const attrRegex = /([a-zA-Z0-9:_-]+)(?:\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
-  let match;
-  while ((match = attrRegex.exec(attrString))) {
-    const key = match[1].toLowerCase();
-    const value = match[3] ?? match[4] ?? match[5] ?? '';
-    attribs[key] = value;
-  }
-  return attribs;
-}
-
-function parseSimpleHtml(html = '') {
-  const root = { type: 'root', tagName: 'root', attribs: {}, children: [], parent: null };
-  const stack = [root];
-  const tokenRegex = /<!--[\s\S]*?-->|<\/?[a-zA-Z][^>]*>|[^<]+/g;
-  let match;
-
-  while ((match = tokenRegex.exec(html))) {
-    const token = match[0];
-    if (token.startsWith('<!--')) {
-      continue;
-    }
-    if (token.startsWith('</')) {
-      const tagName = token.slice(2, -1).trim().toLowerCase();
-      while (stack.length > 1) {
-        const node = stack.pop();
-        if (node.tagName === tagName) {
-          break;
-        }
-      }
-      continue;
-    }
-    if (token.startsWith('<')) {
-      const selfClosing = /\/>$/.test(token);
-      let inner = token.slice(1, token.length - 1);
-      if (selfClosing && inner.endsWith('/')) {
-        inner = inner.slice(0, -1);
-      }
-      inner = inner.trim();
-      if (!inner) continue;
-      const firstSpace = inner.search(/\s/);
-      let tagName;
-      let attrString = '';
-      if (firstSpace === -1) {
-        tagName = inner.toLowerCase();
-      } else {
-        tagName = inner.slice(0, firstSpace).toLowerCase();
-        attrString = inner.slice(firstSpace + 1);
-      }
-      const attribs = parseAttributes(attrString);
-      const parent = stack[stack.length - 1];
-      const node = { type: 'tag', name: tagName, tagName, attribs, children: [], parent };
-      parent.children.push(node);
-      if (!selfClosing && !VOID_TAGS.has(tagName)) {
-        stack.push(node);
-      }
-      continue;
-    }
-    const textValue = token;
-    const parent = stack[stack.length - 1];
-    if (!parent) continue;
-    parent.children.push({ type: 'text', value: textValue, parent });
-  }
-
-  return root;
-}
-
-function collectText(node) {
-  if (!node) return '';
-  if (node.type === 'text') {
-    return node.value || '';
-  }
-  const children = node.children || [];
-  return children.map(child => collectText(child)).join('');
-}
-
-function createWrapper(nodes) {
-  const wrapper = {
-    length: nodes.length,
-    each(callback) {
-      nodes.forEach((node, index) => callback(index, node));
-      return wrapper;
-    },
-    get(index) {
-      return nodes[index];
-    },
-    first() {
-      return createWrapper(nodes.length ? [nodes[0]] : []);
-    },
-    text() {
-      return nodes.map(node => collectText(node)).join('');
-    }
-  };
-  return wrapper;
-}
-
-function buildMatcher(selector) {
-  const trimmed = selector.trim();
-  if (!trimmed) return null;
-  if (trimmed === '*') {
-    return () => true;
-  }
-  if (trimmed.startsWith('#')) {
-    const id = trimmed.slice(1);
-    return node => (node.attribs.id || '') === id;
-  }
-
-  const attrWithTagRegex = /^(?<tag>[a-zA-Z0-9:_-]+)?\s*\[\s*(?<key>[a-zA-Z0-9:_-]+)\s*(?<op>[*^$|~]?=)\s*['"]?(?<value>[^'"\]]+)['"]?\s*\]$/;
-  const attrOnlyRegex = /^\[\s*(?<key>[a-zA-Z0-9:_-]+)\s*(?<op>[*^$|~]?=)\s*['"]?(?<value>[^'"\]]+)['"]?\s*\]$/;
-  let attrMatch = attrWithTagRegex.exec(trimmed) || attrOnlyRegex.exec(trimmed);
-  if (attrMatch) {
-    const tag = attrMatch.groups.tag ? attrMatch.groups.tag.toLowerCase() : null;
-    const key = (attrMatch.groups.key || '').toLowerCase();
-    const op = attrMatch.groups.op || '=';
-    const value = attrMatch.groups.value || '';
-    return node => {
-      if (tag && node.tagName !== tag) return false;
-      const attrValue = node.attribs[key];
-      if (typeof attrValue !== 'string') return false;
-      switch (op) {
-        case '=':
-          return attrValue === value;
-        case '*=':
-          return attrValue.includes(value);
-        case '^=':
-          return attrValue.startsWith(value);
-        case '$=':
-          return attrValue.endsWith(value);
-        default:
-          return attrValue === value;
-      }
-    };
-  }
-
-  return node => node.tagName === trimmed.toLowerCase();
-}
-
-function traverse(node, visitor) {
-  for (const child of node.children || []) {
-    if (child.type === 'tag') {
-      visitor(child);
-      traverse(child, visitor);
-    }
-  }
-}
-
-function getDescendantElements(node) {
-  const results = [];
-  traverse(node, descendant => {
-    results.push(descendant);
-  });
-  return results;
-}
-
-function findMatches(root, selector) {
-  let cleaned = selector.trim();
-  if (!cleaned) return [];
-
-  if (cleaned.includes(',')) {
-    const parts = cleaned.split(',').map(part => part.trim()).filter(Boolean);
-    const seen = new Set();
-    const result = [];
-    for (const part of parts) {
-      for (const node of findMatches(root, part)) {
-        if (!seen.has(node)) {
-          seen.add(node);
-          result.push(node);
-        }
-      }
-    }
-    return result;
-  }
-
-  const descendantMatch = cleaned.match(/^(?<parent>[a-zA-Z0-9:_-]+)\s+\*$/);
-  if (descendantMatch) {
-    const parentSelector = descendantMatch.groups.parent;
-    const parentMatcher = buildMatcher(parentSelector);
-    if (!parentMatcher) return [];
-    const parents = [];
-    traverse(root, node => {
-      if (parentMatcher(node)) {
-        parents.push(node);
-      }
-    });
-    return parents.flatMap(node => getDescendantElements(node));
-  }
-
-  const matcher = buildMatcher(cleaned);
-  if (!matcher) return [];
-  const matches = [];
-  traverse(root, node => {
-    if (matcher(node)) {
-      matches.push(node);
-    }
-  });
-  return matches;
-}
-
-function createMiniCheerio(html) {
-  const root = parseSimpleHtml(html || '');
-  const $ = selectorOrNode => {
-    if (typeof selectorOrNode === 'string') {
-      const nodes = findMatches(root, selectorOrNode);
-      return createWrapper(nodes);
-    }
-    if (selectorOrNode && typeof selectorOrNode === 'object') {
-      return createWrapper([selectorOrNode]);
-    }
-    return createWrapper([]);
-  };
-  $.root = root;
-  return $;
-}
 
 async function fetchHtmlFromUrl(url) {
   try {
@@ -348,22 +112,12 @@ function depthScore(element) {
   return Math.max(0, 0.24 - depth * 0.02);
 }
 
-function resolveAttrMatch(tagName, attribs) {
+function resolveAttrMatch(attribs) {
   for (const entry of ATTR_PRIORITY) {
     for (const key of entry.keys) {
       if (attribs[key]) {
         return { key, value: attribs[key], meta: entry };
       }
-    }
-  }
-  if (tagName === 'input' && attribs.type) {
-    const normalized = attribs.type.toLowerCase();
-    if (normalized === 'password' || normalized === 'email') {
-      return {
-        key: 'type',
-        value: attribs.type,
-        meta: { keys: ['type'], weight: 0.36, type: 'attr-tag' }
-      };
     }
   }
   return null;
@@ -415,13 +169,6 @@ function buildFallbacks(tagName, match, attribs, text, labelText) {
   if (match && match.key !== 'name' && attribs.name) {
     fallbacks.push(`${tagName}[name="${cssEscape(attribs.name)}"]`);
   }
-  if (match && match.key && match.value) {
-    const safeValue = match.value.replace(/'/g, "&apos;");
-    fallbacks.push(`xpath=//${tagName}[@${match.key}='${safeValue}']`);
-  } else if (isMeaningfulText(text)) {
-    const safeText = text.replace(/'/g, "&apos;");
-    fallbacks.push(`xpath=//${tagName}[contains(normalize-space(.),'${safeText}')]`);
-  }
   return Array.from(new Set(fallbacks));
 }
 
@@ -454,7 +201,7 @@ function scoreElement($, selector, match, text, tagName) {
   if (!INTERACTIVE_TAGS.has(tagName)) {
     score -= 0.08;
   }
-  return Math.max(0.1, Math.min(0.99, Number(score.toFixed(2))));
+  return Math.max(0.1, Math.min(1, Number(score.toFixed(2))));
 }
 
 function dedupeBySelector(locators) {
@@ -529,7 +276,7 @@ function computeLocatorCandidates(html) {
 
     const text = getElementText($, element);
     const labelText = findLabelText($, element);
-    const match = resolveAttrMatch(tagName, attribs);
+    const match = resolveAttrMatch(attribs);
     if (!match && !isMeaningfulText(text) && !labelText) {
       return;
     }
@@ -572,319 +319,6 @@ function extractFeatureTitle(requirement) {
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
-}
-
-const STEP_REGEX = /^(given|when|then|and|but|dado|cuando|entonces|y|pero)\b/i;
-const SCENARIO_REGEX = /^(scenario(?: outline)?|escenario(?:\s+de\s+ejemplos)?|escenario(?:\s+outline)?)/i;
-const FEATURE_REGEX = /^(feature|característica)/i;
-
-function parseGherkinText(gherkinText = '') {
-  const lines = gherkinText.split(/\r?\n/);
-  const scenarios = [];
-  let currentScenario = null;
-  let featureName = null;
-  let totalSteps = 0;
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    if (FEATURE_REGEX.test(line) && line.includes(':')) {
-      featureName = line.split(':').slice(1).join(':').trim() || featureName;
-      continue;
-    }
-
-    if (SCENARIO_REGEX.test(line) && line.includes(':')) {
-      const scenarioName = line.split(':').slice(1).join(':').trim() || `Escenario ${scenarios.length + 1}`;
-      currentScenario = { name: scenarioName, steps: [] };
-      scenarios.push(currentScenario);
-      continue;
-    }
-
-    if (STEP_REGEX.test(line)) {
-      if (!currentScenario) {
-        currentScenario = { name: `Escenario ${scenarios.length + 1}`, steps: [] };
-        scenarios.push(currentScenario);
-      }
-      currentScenario.steps.push(line);
-      totalSteps += 1;
-    }
-  }
-
-  return {
-    featureName: featureName || 'Escenario automatizado',
-    scenarios,
-    totalSteps
-  };
-}
-
-function sanitizeProjectName(text) {
-  return (text || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase() || 'gherkin-project';
-}
-
-function createLocatorSuggestion({ name, css, xpath, fallbacks = [], rationale, score = 0.6 }) {
-  return {
-    name,
-    css,
-    xpath,
-    score: Math.max(0.45, Math.min(0.95, Number(score.toFixed(2)))),
-    fallbacks: Array.from(new Set(fallbacks.filter(Boolean))),
-    rationale
-  };
-}
-
-function buildLocatorsFromGherkin(parsed) {
-  const suggestions = [];
-  const seen = new Set();
-
-  function push(locator) {
-    if (!locator || !locator.name) return;
-    const key = `${locator.name}|${locator.css}|${locator.xpath}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    suggestions.push(locator);
-  }
-
-  for (const scenario of parsed.scenarios) {
-    for (const step of scenario.steps) {
-      const lower = step.toLowerCase();
-      if (/(correo|email|usuario|mail)/.test(lower)) {
-        push(
-          createLocatorSuggestion({
-            name: 'inputEmail',
-            css: "input[name='email']",
-            xpath: "//input[@name='email']",
-            fallbacks: ["text=Correo", "text=Email", "xpath=//label[contains(translate(normalize-space(.),'EMAIL','email'),'email')]//input"],
-            rationale: `Derivado del paso "${step}" buscando campo de correo.`,
-            score: 0.72
-          })
-        );
-      }
-      if (/(contraseñ|password|clave)/.test(lower)) {
-        push(
-          createLocatorSuggestion({
-            name: 'inputPassword',
-            css: "input[type='password']",
-            xpath: "//input[@type='password']",
-            fallbacks: ["text=Contraseña", "xpath=//input[contains(@name,'pass')]"],
-            rationale: `Derivado del paso "${step}" para el campo de contraseña.`,
-            score: 0.7
-          })
-        );
-      }
-      if (/(recordar|mantener sesión|mantenerme)/.test(lower)) {
-        push(
-          createLocatorSuggestion({
-            name: 'chkRememberUser',
-            css: "input[type='checkbox'][name*='remember']",
-            xpath: "//input[@type='checkbox' and contains(@name,'remember')]",
-            fallbacks: ["text=Recordar", "xpath=//label[contains(.,'Recordar')]/input"],
-            rationale: `Derivado del paso "${step}" para recordar usuario.`,
-            score: 0.68
-          })
-        );
-      }
-      if (/(iniciar sesión|entrar|acceder|login)/.test(lower)) {
-        push(
-          createLocatorSuggestion({
-            name: 'btnLogin',
-            css: "[data-testid='login'], button[type='submit']",
-            xpath: "//*[@data-testid='login' or (self::button and @type='submit')]",
-            fallbacks: ["text=Iniciar sesión", "role=button name=\"Iniciar sesión\""],
-            rationale: `Derivado del paso "${step}" para accionar el login.`,
-            score: 0.74
-          })
-        );
-      }
-      if (/(dashboard|panel|inicio|home)/.test(lower)) {
-        push(
-          createLocatorSuggestion({
-            name: 'lblDashboardHeading',
-            css: "main h1",
-            xpath: "//main//h1",
-            fallbacks: ["text=Dashboard", "text=Panel", "role=heading name=\"Panel\""],
-            rationale: `Derivado del paso "${step}" para validar la pantalla principal.`,
-            score: 0.63
-          })
-        );
-      }
-      if (/(buscar|search)/.test(lower)) {
-        push(
-          createLocatorSuggestion({
-            name: 'inputSearch',
-            css: "input[type='search'], input[name*='search']",
-            xpath: "//input[@type='search' or contains(@name,'search')]",
-            fallbacks: ["text=Buscar", "aria-label=buscar"],
-            rationale: `Derivado del paso "${step}" para el campo de búsqueda.`,
-            score: 0.66
-          })
-        );
-      }
-      if (/(bot[oó]n|click|clic|presiono|presionar)/.test(lower) && !/(iniciar sesión|login|entrar|acceder)/.test(lower)) {
-        push(
-          createLocatorSuggestion({
-            name: 'btnPrincipal',
-            css: "button",
-            xpath: "//button",
-            fallbacks: ["role=button", "xpath=//button[1]"],
-            rationale: `Derivado del paso "${step}" para interactuar con un botón genérico.`,
-            score: 0.55
-          })
-        );
-      }
-    }
-  }
-
-  if (!suggestions.length) {
-    push(
-      createLocatorSuggestion({
-        name: 'elementoPrincipal',
-        css: 'body *:first-child',
-        xpath: '//*',
-        fallbacks: ["xpath=//*"],
-        rationale: 'Sugerencia genérica al no identificar elementos específicos en los pasos.',
-        score: 0.48
-      })
-    );
-  }
-
-  return ensureUniqueNames(suggestions);
-}
-
-function extractHintsFromSelector(selector = '') {
-  const hints = { ids: [], attributes: [], classes: [], texts: [] };
-  if (!selector) return hints;
-
-  let match;
-  const idRegex = /#([a-zA-Z0-9_-]+)/g;
-  while ((match = idRegex.exec(selector))) {
-    hints.ids.push(match[1]);
-  }
-
-  const classRegex = /\.([a-zA-Z0-9_-]+)/g;
-  while ((match = classRegex.exec(selector))) {
-    hints.classes.push(match[1]);
-  }
-
-  const attrRegex = /\[\s*([a-zA-Z0-9:_-]+)\s*=\s*['"]?([^'"\]]+)['"]?\s*\]/g;
-  while ((match = attrRegex.exec(selector))) {
-    hints.attributes.push({ key: match[1], value: match[2] });
-  }
-
-  const xpathAttrRegex = /@([a-zA-Z0-9:_-]+)\s*=\s*['"]([^'"]+)['"]/g;
-  while ((match = xpathAttrRegex.exec(selector))) {
-    hints.attributes.push({ key: match[1], value: match[2] });
-  }
-
-  const textRegex = /text\s*=\s*['"]([^'"]+)['"]/gi;
-  while ((match = textRegex.exec(selector))) {
-    hints.texts.push(match[1]);
-  }
-
-  const containsRegex = /contains\([^,]+,\s*['"]([^'"]+)['"]/gi;
-  while ((match = containsRegex.exec(selector))) {
-    hints.texts.push(match[1]);
-  }
-
-  hints.ids = Array.from(new Set(hints.ids));
-  hints.classes = Array.from(new Set(hints.classes));
-  hints.texts = Array.from(new Set(hints.texts));
-
-  const attrKey = new Set();
-  hints.attributes = hints.attributes.filter(attr => {
-    const signature = `${attr.key}:${attr.value}`;
-    if (attrKey.has(signature)) return false;
-    attrKey.add(signature);
-    return true;
-  });
-
-  return hints;
-}
-
-function mergeHints(failed = {}) {
-  const combined = { ids: [], attributes: [], classes: [], texts: [] };
-  const selectors = [failed.css, failed.xpath].filter(Boolean);
-  for (const selector of selectors) {
-    const hints = extractHintsFromSelector(selector);
-    combined.ids.push(...hints.ids);
-    combined.classes.push(...hints.classes);
-    combined.texts.push(...hints.texts);
-    combined.attributes.push(...hints.attributes);
-  }
-
-  combined.ids = Array.from(new Set(combined.ids));
-  combined.classes = Array.from(new Set(combined.classes));
-  combined.texts = Array.from(new Set(combined.texts));
-
-  const attrKey = new Set();
-  combined.attributes = combined.attributes.filter(attr => {
-    const signature = `${attr.key}:${attr.value}`;
-    if (attrKey.has(signature)) return false;
-    attrKey.add(signature);
-    return true;
-  });
-
-  return combined;
-}
-
-function scoreSelfHealCandidate(candidate, hints) {
-  let score = typeof candidate.score === 'number' ? candidate.score : 0.5;
-  const haystack = [candidate.css || '', candidate.xpath || '', ...(candidate.fallbacks || [])]
-    .join(' ')
-    .toLowerCase();
-
-  for (const id of hints.ids) {
-    if (!id) continue;
-    const token = id.toLowerCase();
-    if (haystack.includes(`#${token}`) || haystack.includes(`id='${token}'`) || haystack.includes(`id="${token}"`)) {
-      score += 0.18;
-    }
-  }
-
-  for (const cls of hints.classes) {
-    if (!cls) continue;
-    const token = cls.toLowerCase();
-    if (haystack.includes(`.${token}`) || haystack.includes(`class='${token}'`) || haystack.includes(`class="${token}"`)) {
-      score += 0.08;
-    }
-  }
-
-  for (const attr of hints.attributes) {
-    if (!attr || !attr.key) continue;
-    const key = attr.key.toLowerCase();
-    const value = (attr.value || '').toLowerCase();
-    if (!value) continue;
-    if (haystack.includes(`${key}='${value}'`) || haystack.includes(`${key}="${value}"`)) {
-      score += 0.12;
-    }
-  }
-
-  for (const text of hints.texts) {
-    if (!text) continue;
-    if (haystack.includes(text.toLowerCase())) {
-      score += 0.1;
-    }
-  }
-
-  return Math.max(0.1, Math.min(0.99, Number(score.toFixed(2))));
-}
-
-function selectSelfHealCandidate(candidates, hints) {
-  let best = null;
-  let bestScore = 0;
-  for (const candidate of candidates) {
-    const candidateScore = scoreSelfHealCandidate(candidate, hints);
-    if (!best || candidateScore > bestScore) {
-      best = { ...candidate, score: candidateScore };
-      bestScore = candidateScore;
-    }
-  }
-  return best;
 }
 
 function deriveScenarioSteps(requirement) {
@@ -1090,105 +524,22 @@ router.post('/nl2gherkin', async (req, res) => {
   return res.json({ ...heuristic, source: 'heuristic' });
 });
 
-router.post('/gherkin2code', (req, res) => {
-  const { frameworkId, patternId, gherkin } = req.body || {};
-
-  if (!frameworkId) {
-    return res.status(400).json({ error: 'frameworkId es obligatorio.' });
-  }
-  if (!patternId) {
-    return res.status(400).json({ error: 'patternId es obligatorio.' });
-  }
-  if (!gherkin || !gherkin.trim()) {
-    return res.status(400).json({ error: 'Debes proporcionar el texto Gherkin.' });
-  }
-
-  const parsed = parseGherkinText(gherkin);
-  const locators = buildLocatorsFromGherkin(parsed);
-  const projectName = sanitizeProjectName(parsed.featureName);
-
-  try {
-    const { files, framework, pattern } = generateProject({
-      projectName,
-      frameworkId,
-      patternId,
-      locators,
-      writeOutput: false
-    });
-
-    const fileEntries = Object.entries(files || {}).map(([path, content]) => ({ path, content }));
-
-    return res.json({
-      files: fileEntries,
-      summary: {
-        framework,
-        pattern,
-        totalScenarios: parsed.scenarios.length,
-        totalSteps: parsed.totalSteps
-      }
-    });
-  } catch (error) {
-    console.error('Error en /api/gherkin2code', error);
-    const message = error.message || 'Error interno al convertir Gherkin a código';
-    if (/Template no disponible|El patrón|frameworkId requerido|manifest/i.test(message)) {
-      return res.status(400).json({ error: message });
-    }
-    return res.status(500).json({ error: message });
-  }
+router.post('/gherkin2code', (_req, res) => {
+  return res.status(501).json({ error: 'Conversión Gherkin→código pendiente de la siguiente iteración.' });
 });
 
 router.post('/selfheal', (req, res) => {
-  const { failed = {}, historyKey } = req.body || {};
+  const { historyKey } = req.body || {};
   if (!historyKey) {
     return res.status(400).json({ error: 'historyKey requerido para self-healing.' });
   }
-
-  const historyPath = `locators/${historyKey}.json`;
-  const stored = readJsonSafe(historyPath, null);
-  const hints = mergeHints(failed);
-
-  let patched = null;
-  let learned = false;
-  let reason = 'No se encontraron candidatos para reemplazar el selector fallido.';
-
-  if (failed.contextHtml) {
-    try {
-      const candidates = computeLocatorCandidates(failed.contextHtml);
-      const selected = selectSelfHealCandidate(candidates, hints);
-      if (selected) {
-        patched = {
-          css: selected.css || null,
-          xpath: selected.xpath || null,
-          score: selected.score
-        };
-        reason = 'Selector sugerido heurísticamente y guardado para futuros intentos.';
-        saveJson(historyPath, {
-          updatedAt: new Date().toISOString(),
-          lastFailed: failed,
-          suggestion: {
-            css: selected.css || null,
-            xpath: selected.xpath || null,
-            fallbacks: selected.fallbacks || [],
-            score: selected.score
-          }
-        });
-        learned = true;
-      }
-    } catch (error) {
-      console.warn('No se pudo analizar contextHtml para self-healing:', error.message);
-    }
-  }
-
-  if (!patched && stored?.suggestion) {
-    patched = {
-      css: stored.suggestion.css || null,
-      xpath: stored.suggestion.xpath || null,
-      score: typeof stored.suggestion.score === 'number' ? Number(stored.suggestion.score) : 0.5
-    };
-    reason = 'Se reutilizó la sugerencia previamente aprendida para este flujo.';
-  }
-
-  res.json({ patched, reason, learned });
+  const stored = readJsonSafe(`locators/${historyKey}.json`, { suggestions: [] });
+  return res.json({
+    patched: null,
+    reason: 'Endpoint en modo preparación, se devolverán datos almacenados cuando existan.',
+    learned: false,
+    history: stored
+  });
 });
 
 module.exports = router;
