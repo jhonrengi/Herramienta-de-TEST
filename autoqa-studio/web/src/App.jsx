@@ -20,6 +20,24 @@ export default function App() {
   const [error, setError] = useState('')
   const [generatedInfo, setGeneratedInfo] = useState(null)
   const [runResult, setRunResult] = useState(null)
+  const [aiUrl, setAiUrl] = useState('http://localhost:3000/login')
+  const [aiHtml, setAiHtml] = useState('')
+  const [aiHtmlExpanded, setAiHtmlExpanded] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiLocators, setAiLocators] = useState([])
+  const [aiMeta, setAiMeta] = useState(null)
+  const [aiError, setAiError] = useState('')
+  const [aiSavedAt, setAiSavedAt] = useState(null)
+  const [requirementText, setRequirementText] = useState('')
+  const [gherkinFeature, setGherkinFeature] = useState('')
+  const [gherkinScenarios, setGherkinScenarios] = useState('')
+  const [gherkinSource, setGherkinSource] = useState('')
+  const [nlError, setNlError] = useState('')
+  const [nlLoading, setNlLoading] = useState(false)
+  const [codeError, setCodeError] = useState('')
+  const [codeLoading, setCodeLoading] = useState(false)
+  const [codeFiles, setCodeFiles] = useState([])
+  const [selfHealingEnabled, setSelfHealingEnabled] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -51,6 +69,107 @@ export default function App() {
     () => templates.patterns.find(p => p.id === patternId),
     [templates.patterns, patternId]
   )
+
+  const scoreClass = score => {
+    if (score >= 0.9) return 'score-badge high'
+    if (score >= 0.75) return 'score-badge medium'
+    return 'score-badge low'
+  }
+
+  const analyzeWithAI = async () => {
+    setAiError('')
+    setAiSavedAt(null)
+    const trimmedHtml = aiHtml.trim()
+    const trimmedUrl = aiUrl.trim()
+    if (!trimmedHtml && !trimmedUrl) {
+      setAiError('Proporciona una URL o pega el HTML para analizar.')
+      return
+    }
+    const source = trimmedHtml
+      ? { type: 'html', value: trimmedHtml }
+      : { type: 'url', value: trimmedUrl }
+    setAiLoading(true)
+    try {
+      const res = await fetch(`${API}/api/locators/ai-extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(payload?.error || 'La extracción IA falló')
+      }
+      setAiLocators(payload?.locators || [])
+      setAiMeta(payload?.meta || null)
+    } catch (err) {
+      setAiError(err.message || 'Error al analizar con IA')
+      setAiLocators([])
+      setAiMeta(null)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const convertNlToGherkin = async () => {
+    setNlError('')
+    setCodeError('')
+    setCodeFiles([])
+    if (!requirementText.trim()) {
+      setNlError('Describe el flujo para generar los escenarios.')
+      return
+    }
+    setNlLoading(true)
+    try {
+      const res = await fetch(`${API}/api/nl2gherkin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirement: requirementText })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(payload?.error || 'No se pudo transformar el flujo a Gherkin')
+      }
+      setGherkinFeature(payload?.feature || '')
+      setGherkinScenarios(payload?.scenarios || '')
+      setGherkinSource(payload?.source || '')
+    } catch (err) {
+      setNlError(err.message || 'Error al generar Gherkin')
+    } finally {
+      setNlLoading(false)
+    }
+  }
+
+  const generateCodeFromGherkin = async () => {
+    setCodeError('')
+    setCodeFiles([])
+    if (!gherkinFeature.trim() && !gherkinScenarios.trim()) {
+      setCodeError('Completa el bloque Gherkin antes de generar código.')
+      return
+    }
+    setCodeLoading(true)
+    try {
+      const res = await fetch(`${API}/api/gherkin2code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          feature: gherkinFeature,
+          scenarios: gherkinScenarios,
+          frameworkId,
+          patternId,
+          dryRun: true
+        })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(payload?.error || 'La generación de código aún no está disponible')
+      }
+      setCodeFiles(payload?.files || [])
+    } catch (err) {
+      setCodeError(err.message || 'Error al convertir Gherkin a código')
+    } finally {
+      setCodeLoading(false)
+    }
+  }
 
   const mockRecord = async () => {
     setStatus('recording')
@@ -148,6 +267,177 @@ export default function App() {
 
       <main className="content">
         {error && <div className="alert alert-error">{error}</div>}
+
+        <section className="panel-grid">
+          <article className="panel-card">
+            <div className="panel-header">
+              <h2>Analizar con IA</h2>
+              <p>Ingiere una URL o pega el HTML para sugerir localizadores con explicación.</p>
+            </div>
+            <label className="field">
+              <span>URL a analizar</span>
+              <input value={aiUrl} onChange={e => setAiUrl(e.target.value)} placeholder="https://app.demo/login" />
+            </label>
+
+            <div className="collapsible">
+              <button type="button" className="link-button" onClick={() => setAiHtmlExpanded(prev => !prev)}>
+                {aiHtmlExpanded ? 'Ocultar HTML manual' : 'Pegar HTML manualmente'}
+              </button>
+              {aiHtmlExpanded && (
+                <textarea
+                  className="html-textarea"
+                  value={aiHtml}
+                  onChange={e => setAiHtml(e.target.value)}
+                  placeholder="&lt;html&gt;...&lt;/html&gt;"
+                />)
+              }
+            </div>
+
+            <div className="panel-actions">
+              <button className="primary" type="button" onClick={analyzeWithAI} disabled={aiLoading}>
+                {aiLoading ? 'Analizando…' : 'Analizar (IA)'}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!aiLocators.length}
+                onClick={() => {
+                  setLocators(aiLocators)
+                  setAiSavedAt(new Date().toISOString())
+                }}
+              >
+                Guardar estos localizadores
+              </button>
+            </div>
+            {aiError && <div className="alert alert-error small">{aiError}</div>}
+            {aiMeta && (
+              <div className="meta-info">
+                <span>Duración: {aiMeta.elapsedMs ?? '–'} ms</span>
+                <span>Fuente: {aiMeta.sourceType === 'html' ? 'HTML manual' : 'URL analizada'}</span>
+                {aiMeta.warning && <span className="warning">⚠️ {aiMeta.warning}</span>}
+              </div>
+            )}
+            {aiLocators.length ? (
+              <div className="table-wrapper">
+                <table className="locators-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Selector principal</th>
+                      <th>Puntaje</th>
+                      <th>Fallbacks</th>
+                      <th>Rationale</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiLocators.map(locator => (
+                      <tr key={locator.name}>
+                        <td>{locator.name}</td>
+                        <td>
+                          <code>{locator.css || locator.xpath}</code>
+                        </td>
+                        <td>
+                          <span className={scoreClass(locator.score ?? 0)}>{(locator.score ?? 0).toFixed(2)}</span>
+                        </td>
+                        <td className="fallback-cell">
+                          {locator.fallbacks?.length ? (
+                            locator.fallbacks.map(fallback => (
+                              <span key={`${locator.name}-${fallback}`} className="pill">
+                                {fallback}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="muted">Sin alternativas</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="rationale" title={locator.rationale || 'Sin explicación disponible'}>
+                            Ver detalle
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="empty">Aún no se han generado localizadores IA.</p>
+            )}
+            {aiSavedAt && <p className="success-note">Se enviaron al Paso 1 para continuar con la generación.</p>}
+          </article>
+
+          <article className="panel-card">
+            <div className="panel-header">
+              <h2>Historias NL → Gherkin → Código</h2>
+              <p>Describe el flujo en lenguaje natural y convierte los escenarios para tu stack.</p>
+            </div>
+            <label className="field">
+              <span>Describe el flujo…</span>
+              <textarea
+                value={requirementText}
+                onChange={e => setRequirementText(e.target.value)}
+                placeholder="Como usuario quiero iniciar sesión para consultar mi panel"
+              />
+            </label>
+            <button className="primary" type="button" onClick={convertNlToGherkin} disabled={nlLoading}>
+              {nlLoading ? 'Generando Gherkin…' : 'Transformar a Gherkin'}
+            </button>
+            {nlError && <div className="alert alert-error small">{nlError}</div>}
+            {(gherkinFeature || gherkinScenarios) && (
+              <div className="gherkin-editors">
+                <label className="field">
+                  <span>Feature ({gherkinSource || 'heurística/LLM'})</span>
+                  <textarea value={gherkinFeature} onChange={e => setGherkinFeature(e.target.value)} />
+                </label>
+                <label className="field">
+                  <span>Scenarios</span>
+                  <textarea value={gherkinScenarios} onChange={e => setGherkinScenarios(e.target.value)} />
+                </label>
+              </div>
+            )}
+            <div className="panel-meta-inline">
+              <span>Framework: {selectedFramework?.name || 'sin seleccionar'}</span>
+              <span>Patrón: {selectedPattern?.name || 'sin seleccionar'}</span>
+            </div>
+            <button
+              className="secondary"
+              type="button"
+              onClick={generateCodeFromGherkin}
+              disabled={codeLoading || (!gherkinFeature && !gherkinScenarios)}
+            >
+              {codeLoading ? 'Preparando archivos…' : 'Generar código desde Gherkin'}
+            </button>
+            {codeError && <div className="alert alert-error small">{codeError}</div>}
+            {codeFiles.length > 0 && (
+              <ul className="files-list">
+                {codeFiles.map(file => (
+                  <li key={file}>{file}</li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="panel-card slim">
+            <div className="panel-header">
+              <h2>Self-healing al ejecutar</h2>
+              <p>Configura si se intentará reemplazar selectores inestables durante las corridas.</p>
+            </div>
+            <label className={`toggle ${selfHealingEnabled ? 'enabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={selfHealingEnabled}
+                onChange={e => setSelfHealingEnabled(e.target.checked)}
+              />
+              <span className="slider" />
+              <span className="toggle-label">Intentar self-healing si falla un selector</span>
+            </label>
+            <p className="muted">
+              {selfHealingEnabled
+                ? 'Se mostrará esta preferencia cuando ejecutes las suites. (Solo UI por ahora)'
+                : 'Puedes activarlo para guardar la preferencia. No realiza llamadas adicionales todavía.'}
+            </p>
+          </article>
+        </section>
 
         <section className="step-grid">
           <article className="card">
