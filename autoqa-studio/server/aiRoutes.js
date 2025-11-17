@@ -4,6 +4,7 @@ const cheerio = require('cheerio');
 const { performance } = require('perf_hooks');
 
 const { readJsonSafe } = require('./data/utils');
+const { generateProject } = require('./services/codegenService');
 
 const router = express.Router();
 
@@ -524,8 +525,144 @@ router.post('/nl2gherkin', async (req, res) => {
   return res.json({ ...heuristic, source: 'heuristic' });
 });
 
-router.post('/gherkin2code', (_req, res) => {
-  return res.status(501).json({ error: 'Conversión Gherkin→código pendiente de la siguiente iteración.' });
+function joinGherkinPieces({ gherkin, feature, scenarios }) {
+  const parts = [];
+  if (gherkin && gherkin.trim()) {
+    parts.push(gherkin.trim());
+  } else {
+    if (feature && feature.trim()) {
+      parts.push(feature.trim());
+    }
+    if (scenarios && scenarios.trim()) {
+      parts.push(scenarios.trim());
+    }
+  }
+  return parts.join('\n\n').trim();
+}
+
+function summarizeGherkin(raw) {
+  const text = (raw || '').replace(/\r/g, '');
+  const lines = text.split('\n');
+  const summary = {
+    feature: null,
+    scenarios: [],
+    totalScenarios: 0,
+    totalSteps: 0,
+    text
+  };
+
+  let currentScenario = null;
+  let scenarioCount = 0;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+
+    const featureMatch = line.match(/^Feature:\s*(.+)/i);
+    if (featureMatch) {
+      summary.feature = featureMatch[1].trim() || 'Feature sin título';
+      currentScenario = null;
+      continue;
+    }
+
+    const scenarioMatch = line.match(/^(Scenario(?: Outline)?):\s*(.+)/i);
+    if (scenarioMatch) {
+      scenarioCount += 1;
+      currentScenario = {
+        name: scenarioMatch[2].trim() || `Escenario ${scenarioCount}`,
+        type: scenarioMatch[1],
+        steps: []
+      };
+      summary.scenarios.push(currentScenario);
+      continue;
+    }
+
+    const stepMatch = line.match(/^(Given|When|Then|And|But|\*)\s+(.*)/i);
+    if (stepMatch) {
+      if (!currentScenario) {
+        scenarioCount += 1;
+        currentScenario = {
+          name: `Escenario ${scenarioCount}`,
+          type: 'Scenario',
+          steps: []
+        };
+        summary.scenarios.push(currentScenario);
+      }
+      currentScenario.steps.push({ keyword: stepMatch[1], text: stepMatch[2].trim() });
+      summary.totalSteps += 1;
+    }
+  }
+
+  summary.totalScenarios = summary.scenarios.length;
+  if (!summary.feature) {
+    summary.feature = 'Feature sin título';
+  }
+  return summary;
+}
+
+router.post('/gherkin2code', (req, res) => {
+  const {
+    gherkin,
+    feature,
+    scenarios,
+    frameworkId,
+    patternId,
+    locators = [],
+    projectName = 'gherkin-preview',
+    dryRun = true
+  } = req.body || {};
+
+  const gherkinText = joinGherkinPieces({ gherkin, feature, scenarios });
+  if (!gherkinText) {
+    return res.status(400).json({ error: 'Completa el bloque Gherkin antes de solicitar el código.' });
+  }
+  if (!frameworkId) {
+    return res.status(400).json({ error: 'Debes seleccionar al menos un framework para generar el código.' });
+  }
+
+  const summary = summarizeGherkin(gherkinText);
+
+  let preview;
+  try {
+    preview = generateProject({
+      projectName: projectName || 'gherkin-preview',
+      frameworkId,
+      patternId,
+      locators,
+      writeOutput: !dryRun ? true : false
+    });
+  } catch (error) {
+    const message = error.message || 'No fue posible preparar la plantilla solicitada.';
+    const statusCode = /Template no disponible|patrón/.test(message) ? 400 : 500;
+    return res.status(statusCode).json({ error: message });
+  }
+
+  const files = Object.entries(preview.files || {}).map(([path, contents]) => ({
+    path,
+    size: Buffer.byteLength(contents, 'utf8')
+  }));
+
+  const scenarioStats = summary.scenarios.map(item => ({
+    name: item.name,
+    type: item.type,
+    steps: item.steps.length
+  }));
+
+  return res.json({
+    files,
+    summary: {
+      framework: preview.framework,
+      pattern: preview.pattern,
+      feature: summary.feature,
+      totalScenarios: summary.totalScenarios,
+      totalSteps: summary.totalSteps,
+      scenarios: scenarioStats,
+      dryRun: Boolean(dryRun)
+    },
+    gherkin: summary.text
+  });
 });
 
 router.post('/selfheal', (req, res) => {
