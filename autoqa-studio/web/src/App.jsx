@@ -35,6 +35,7 @@ export default function App() {
   const [codegenError, setCodegenError] = useState('')
   const [nlLoading, setNlLoading] = useState(false)
   const [gherkinCodeLoading, setGherkinCodeLoading] = useState(false)
+  const [gherkinExportLoading, setGherkinExportLoading] = useState(false)
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false)
 
   useEffect(() => {
@@ -341,6 +342,53 @@ export default function App() {
     }
   }
 
+  const exportCodeFromGherkin = async () => {
+    const gherkin = gherkinPreview.trim()
+    if (!gherkin) {
+      setCodegenError('Genera o edita un Gherkin válido antes de exportar.')
+      return
+    }
+    if (!frameworkId || !patternId) {
+      setCodegenError('Selecciona framework y patrón para continuar.')
+      return
+    }
+
+    setGherkinExportLoading(true)
+    setCodegenError('')
+    try {
+      const res = await fetch(`${API}/api/gherkin2code/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frameworkId,
+          patternId,
+          gherkin,
+          locators,
+          projectName,
+          format: 'zip'
+        })
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        throw new Error(payload?.error || 'No se pudo exportar el proyecto ZIP')
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const normalized = (projectName?.trim() ? projectName.trim() : 'autoqa-project').replace(/[^a-zA-Z0-9-_]+/g, '-')
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${normalized || 'autoqa-project'}.zip`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setCodegenError(err.message || 'Error al exportar el proyecto')
+    } finally {
+      setGherkinExportLoading(false)
+    }
+  }
+
   const locatorChips = locators.map(locator => (
     <span key={locator.name} className="chip">
       <span className="chip-title">{locator.name}</span>
@@ -541,13 +589,22 @@ export default function App() {
 
             {codegenError && <div className="alert alert-error small">{codegenError}</div>}
 
-            <button
-              className="secondary"
-              onClick={generateCodeFromGherkin}
-              disabled={gherkinCodeLoading || !gherkinPreview}
-            >
-              {gherkinCodeLoading ? 'Preparando…' : 'Generar código desde Gherkin'}
-            </button>
+            <div className="gherkin-actions">
+              <button
+                className="secondary"
+                onClick={generateCodeFromGherkin}
+                disabled={gherkinCodeLoading || !gherkinPreview}
+              >
+                {gherkinCodeLoading ? 'Preparando…' : 'Generar código desde Gherkin'}
+              </button>
+              <button
+                className="primary"
+                onClick={exportCodeFromGherkin}
+                disabled={gherkinExportLoading || !gherkinPreview}
+              >
+                {gherkinExportLoading ? 'Descargando…' : 'Exportar ZIP listo para ejecutar'}
+              </button>
+            </div>
 
             {!!gherkinFiles.length && (
               <div className="gherkin-output">
