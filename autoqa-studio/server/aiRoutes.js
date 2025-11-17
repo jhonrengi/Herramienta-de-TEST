@@ -5,7 +5,6 @@ const { performance } = require('perf_hooks');
 
 const { readJsonSafe } = require('./data/utils');
 const { generateProject } = require('./services/codegenService');
-const { createZipBuffer } = require('./utils/zipper');
 
 const router = express.Router();
 
@@ -664,58 +663,6 @@ router.post('/gherkin2code', (req, res) => {
     },
     gherkin: summary.text
   });
-});
-
-router.post('/gherkin2code/export', (req, res) => {
-  const {
-    gherkin,
-    feature,
-    scenarios,
-    frameworkId,
-    patternId,
-    locators = [],
-    projectName = 'gherkin-project',
-    format = 'zip'
-  } = req.body || {};
-
-  const gherkinText = joinGherkinPieces({ gherkin, feature, scenarios });
-  if (!gherkinText) {
-    return res.status(400).json({ error: 'Completa el bloque Gherkin antes de exportar el proyecto.' });
-  }
-  if (!frameworkId) {
-    return res.status(400).json({ error: 'Selecciona un framework válido antes de exportar.' });
-  }
-  if (format !== 'zip') {
-    return res.status(400).json({ error: 'Por ahora solo se soporta la exportación ZIP.' });
-  }
-
-  let project;
-  try {
-    project = generateProject({
-      projectName: projectName || 'gherkin-project',
-      frameworkId,
-      patternId,
-      locators,
-      writeOutput: true
-    });
-  } catch (error) {
-    const message = error.message || 'No fue posible preparar el paquete solicitado.';
-    const statusCode = /Template no disponible|patrón/.test(message) ? 400 : 500;
-    return res.status(statusCode).json({ error: message });
-  }
-
-  let zipBuffer;
-  try {
-    zipBuffer = createZipBuffer(project.files || {});
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'No se pudo empaquetar el proyecto.' });
-  }
-
-  const safeName = (slugify(projectName || 'autoqa-project') || 'autoqa-project').replace(/\s+/g, '-');
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.zip"`);
-  res.setHeader('Content-Length', zipBuffer.length);
-  return res.send(zipBuffer);
 });
 
 router.post('/selfheal', (req, res) => {
