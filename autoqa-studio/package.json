@@ -1,0 +1,13 @@
+{
+  "name": "autoqa-studio",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:web": "cd web && npm run dev",
+    "start:all": "concurrently \"npm run dev:server\" \"npm run dev:web\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.1"
+  }
+}

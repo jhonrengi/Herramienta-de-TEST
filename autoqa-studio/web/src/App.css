@@ -753,6 +753,19 @@ body {
   flex-wrap: wrap;
 }
 
+.gherkin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.gherkin-actions .primary,
+.gherkin-actions .secondary {
+  flex: 1;
+  min-width: 220px;
+}
+
 .gherkin-preview {
   font-family: 'JetBrains Mono', 'Fira Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 0.85rem;
