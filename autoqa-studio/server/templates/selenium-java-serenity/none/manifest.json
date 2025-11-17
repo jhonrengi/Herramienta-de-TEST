@@ -4,6 +4,7 @@
     { "src": "serenity.properties.tpl", "dst": "serenity.properties" },
     { "src": "README.md.tpl", "dst": "README.md" },
     { "src": "src/test/resources/locators.json.tpl", "dst": "src/test/resources/locators.json" },
+    { "src": "src/test/java/com/logictest/utils/LocatorHelper.java.tpl", "dst": "src/test/java/com/logictest/utils/LocatorHelper.java" },
     { "src": "src/test/java/com/logictest/tests/LoginTest.java.tpl", "dst": "src/test/java/com/logictest/tests/LoginTest.java" }
   ]
 }

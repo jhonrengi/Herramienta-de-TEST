@@ -1,12 +1,10 @@
 import locators from '../../../fixtures/locators.json';
 
-const selector = name => locators[name].css || locators[name].xpath;
-
 export const Login = {
-  withCredentials: (email, password) => async actor => {
+  withCredentials: (email, password) => actor => {
     const page = actor.ability('page');
-    page.get(selector('input_email')).type(email);
-    page.get(selector('input_password')).type(password);
-    page.get(selector('btn_login')).click();
+    page.locate(locators.input_email).type(email);
+    page.locate(locators.input_password).type(password);
+    page.locate(locators.btn_login).click();
   }
 };

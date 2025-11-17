@@ -1,21 +1,26 @@
 import { Page } from '@playwright/test';
 import selectors from '../locators.json';
+import { getLocator } from '../utils/locator';
 
 type LocatorKey = keyof typeof selectors;
 
 export class LoginPage {
   constructor(private readonly page: Page) {}
 
-  private selector(name: LocatorKey): string {
-    return selectors[name].css ?? selectors[name].xpath;
+  private candidate(name: LocatorKey) {
+    return selectors[name];
   }
 
   async fillCredentials(email: string, password: string) {
-    await this.page.fill(this.selector('input_email'), email);
-    await this.page.fill(this.selector('input_password'), password);
+    const emailField = await getLocator(this.page, this.candidate('input_email'));
+    await emailField.fill(email);
+
+    const passwordField = await getLocator(this.page, this.candidate('input_password'));
+    await passwordField.fill(password);
   }
 
   async submit() {
-    await this.page.click(this.selector('btn_login'));
+    const loginButton = await getLocator(this.page, this.candidate('btn_login'));
+    await loginButton.click();
   }
 }
