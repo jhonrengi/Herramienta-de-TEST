@@ -20,23 +20,21 @@ export default function App() {
   const [error, setError] = useState('')
   const [generatedInfo, setGeneratedInfo] = useState(null)
   const [runResult, setRunResult] = useState(null)
-  const [aiUrl, setAiUrl] = useState('http://localhost:3000/login')
+  const [aiUrl, setAiUrl] = useState('')
   const [aiHtml, setAiHtml] = useState('')
-  const [aiHtmlExpanded, setAiHtmlExpanded] = useState(false)
-  const [aiLoading, setAiLoading] = useState(false)
+  const [aiCollapsed, setAiCollapsed] = useState(true)
   const [aiLocators, setAiLocators] = useState([])
   const [aiMeta, setAiMeta] = useState(null)
+  const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
-  const [aiSavedAt, setAiSavedAt] = useState(null)
-  const [requirementText, setRequirementText] = useState('')
-  const [gherkinFeature, setGherkinFeature] = useState('')
-  const [gherkinScenarios, setGherkinScenarios] = useState('')
-  const [gherkinSource, setGherkinSource] = useState('')
+  const [nlRequirement, setNlRequirement] = useState('')
+  const [gherkinPreview, setGherkinPreview] = useState('')
+  const [gherkinFiles, setGherkinFiles] = useState([])
+  const [gherkinSummary, setGherkinSummary] = useState(null)
   const [nlError, setNlError] = useState('')
+  const [codegenError, setCodegenError] = useState('')
   const [nlLoading, setNlLoading] = useState(false)
-  const [codeError, setCodeError] = useState('')
-  const [codeLoading, setCodeLoading] = useState(false)
-  const [codeFiles, setCodeFiles] = useState([])
+  const [gherkinCodeLoading, setGherkinCodeLoading] = useState(false)
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false)
 
   useEffect(() => {
@@ -198,6 +196,7 @@ export default function App() {
     }
     setStatus('generating')
     setError('')
+    setCodegenError('')
     setGeneratedInfo(null)
     setRunResult(null)
     try {
@@ -237,12 +236,131 @@ export default function App() {
     }
   }
 
+  const analyzeWithAI = async () => {
+    const trimmedHtml = aiHtml.trim()
+    const trimmedUrl = aiUrl.trim()
+    const source = trimmedHtml
+      ? { type: 'html', value: trimmedHtml }
+      : trimmedUrl
+        ? { type: 'url', value: trimmedUrl }
+        : null
+
+    if (!source) {
+      setAiError('Proporciona una URL o pega HTML para analizar.')
+      return
+    }
+
+    setAiLoading(true)
+    setAiError('')
+    setAiMeta(null)
+    try {
+      const res = await fetch(`${API}/api/locators/ai-extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || 'No se pudo analizar el contenido con IA')
+      if (!payload) throw new Error('Respuesta inválida del servidor')
+      setAiLocators(payload.locators || [])
+      setAiMeta(payload.meta || null)
+    } catch (err) {
+      setAiError(err.message || 'Error al analizar con IA')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleSaveAiLocators = () => {
+    if (!aiLocators.length) {
+      setAiError('No hay localizadores para guardar en el plan actual.')
+      return
+    }
+    setLocators(aiLocators)
+    setAiError('')
+  }
+
+  const generateGherkin = async () => {
+    const requirement = nlRequirement.trim()
+    if (!requirement) {
+      setNlError('Describe el flujo para generar Gherkin.')
+      return
+    }
+
+    setNlLoading(true)
+    setNlError('')
+    try {
+      const res = await fetch(`${API}/api/nl2gherkin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requirement })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || 'No se pudo generar el Gherkin')
+      if (!payload) throw new Error('Respuesta inválida del servidor')
+      const { feature = '', scenarios = '' } = payload
+      setGherkinPreview([feature.trim(), scenarios.trim()].filter(Boolean).join('\n\n'))
+      setGherkinFiles([])
+      setGherkinSummary(null)
+    } catch (err) {
+      setNlError(err.message || 'Error al transformar la historia en Gherkin')
+    } finally {
+      setNlLoading(false)
+    }
+  }
+
+  const generateCodeFromGherkin = async () => {
+    const gherkin = gherkinPreview.trim()
+    if (!gherkin) {
+      setCodegenError('Genera o edita un Gherkin válido antes de solicitar el código.')
+      return
+    }
+
+    if (!frameworkId || !patternId) {
+      setCodegenError('Selecciona framework y patrón para continuar.')
+      return
+    }
+
+    setGherkinCodeLoading(true)
+    setCodegenError('')
+    try {
+      const res = await fetch(`${API}/api/gherkin2code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frameworkId, patternId, gherkin })
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || 'No se pudo simular la generación de código')
+      if (!payload) throw new Error('Respuesta inválida del servidor')
+      setGherkinFiles(payload.files || [])
+      setGherkinSummary(payload.summary || null)
+    } catch (err) {
+      setCodegenError(err.message || 'Error al generar código desde Gherkin')
+    } finally {
+      setGherkinCodeLoading(false)
+    }
+  }
+
   const locatorChips = locators.map(locator => (
     <span key={locator.name} className="chip">
       <span className="chip-title">{locator.name}</span>
       <span className="chip-sub">{locator.css || locator.xpath}</span>
     </span>
   ))
+
+  const renderScoreBadge = score => {
+    const value = typeof score === 'number' ? Math.max(0, Math.min(score, 1)) : 0
+    let tone = 'low'
+    if (value >= 0.9) tone = 'high'
+    else if (value >= 0.75) tone = 'mid'
+    return (
+      <span className={`score-badge ${tone}`} title={`Confianza: ${(value * 100).toFixed(0)}%`}>
+        {value.toFixed(2)}
+      </span>
+    )
+  }
+
+  const mainSelector = locator => locator.css || locator.xpath || locator.fallbacks?.[0] || '—'
 
   return (
     <div className="app-shell">
@@ -268,63 +386,67 @@ export default function App() {
       <main className="content">
         {error && <div className="alert alert-error">{error}</div>}
 
-        <section className="panel-grid">
-          <article className="panel-card">
-            <div className="panel-header">
+        <section className="ai-sections">
+          <article className="card ai-card">
+            <div className="card-header">
               <h2>Analizar con IA</h2>
-              <p>Ingiere una URL o pega el HTML para sugerir localizadores con explicación.</p>
-            </div>
-            <label className="field">
-              <span>URL a analizar</span>
-              <input value={aiUrl} onChange={e => setAiUrl(e.target.value)} placeholder="https://app.demo/login" />
-            </label>
-
-            <div className="collapsible">
-              <button type="button" className="link-button" onClick={() => setAiHtmlExpanded(prev => !prev)}>
-                {aiHtmlExpanded ? 'Ocultar HTML manual' : 'Pegar HTML manualmente'}
-              </button>
-              {aiHtmlExpanded && (
-                <textarea
-                  className="html-textarea"
-                  value={aiHtml}
-                  onChange={e => setAiHtml(e.target.value)}
-                  placeholder="&lt;html&gt;...&lt;/html&gt;"
-                />)
-              }
+              <p>Obtén localizadores inteligentes desde una URL o HTML pegado. Calculamos puntuaciones, alternativas y explicación.</p>
             </div>
 
-            <div className="panel-actions">
-              <button className="primary" type="button" onClick={analyzeWithAI} disabled={aiLoading}>
-                {aiLoading ? 'Analizando…' : 'Analizar (IA)'}
-              </button>
+            <div className="ai-inputs">
+              <label className="field">
+                <span>URL pública</span>
+                <input
+                  value={aiUrl}
+                  onChange={e => setAiUrl(e.target.value)}
+                  placeholder="https://mi-app/login"
+                />
+              </label>
+
               <button
                 type="button"
-                className="secondary"
-                disabled={!aiLocators.length}
-                onClick={() => {
-                  setLocators(aiLocators)
-                  setAiSavedAt(new Date().toISOString())
-                }}
+                className="toggle-html"
+                onClick={() => setAiCollapsed(prev => !prev)}
               >
+                {aiCollapsed ? 'Pegar HTML manualmente' : 'Ocultar HTML pegado'}
+              </button>
+
+              {!aiCollapsed && (
+                <label className="field">
+                  <span>HTML de la página</span>
+                  <textarea
+                    value={aiHtml}
+                    onChange={e => setAiHtml(e.target.value)}
+                    placeholder="&lt;html&gt;...&lt;/html&gt;"
+                    rows={6}
+                  />
+                </label>
+              )}
+            </div>
+
+            {aiError && <div className="alert alert-error small">{aiError}</div>}
+
+            <div className="ai-actions">
+              <button className="primary" onClick={analyzeWithAI} disabled={aiLoading}>
+                {aiLoading ? 'Analizando…' : 'Analizar (IA)'}
+              </button>
+              <button className="secondary" onClick={handleSaveAiLocators} disabled={!aiLocators.length}>
                 Guardar estos localizadores
               </button>
             </div>
-            {aiError && <div className="alert alert-error small">{aiError}</div>}
+
             {aiMeta && (
-              <div className="meta-info">
-                <span>Duración: {aiMeta.elapsedMs ?? '–'} ms</span>
-                <span>Fuente: {aiMeta.sourceType === 'html' ? 'HTML manual' : 'URL analizada'}</span>
-                {aiMeta.warning && <span className="warning">⚠️ {aiMeta.warning}</span>}
-              </div>
+              <p className="ai-meta">Fuente: {aiMeta.sourceType} · Tiempo: {Math.round(aiMeta.elapsedMs)} ms</p>
             )}
-            {aiLocators.length ? (
-              <div className="table-wrapper">
-                <table className="locators-table">
+
+            <div className="ai-table-wrapper">
+              {aiLocators.length ? (
+                <table className="ai-table">
                   <thead>
                     <tr>
                       <th>Nombre</th>
                       <th>Selector principal</th>
-                      <th>Puntaje</th>
+                      <th>Score</th>
                       <th>Fallbacks</th>
                       <th>Rationale</th>
                     </tr>
@@ -333,109 +455,132 @@ export default function App() {
                     {aiLocators.map(locator => (
                       <tr key={locator.name}>
                         <td>{locator.name}</td>
+                        <td className="mono">{mainSelector(locator)}</td>
+                        <td>{renderScoreBadge(locator.score ?? 0)}</td>
                         <td>
-                          <code>{locator.css || locator.xpath}</code>
-                        </td>
-                        <td>
-                          <span className={scoreClass(locator.score ?? 0)}>{(locator.score ?? 0).toFixed(2)}</span>
-                        </td>
-                        <td className="fallback-cell">
-                          {locator.fallbacks?.length ? (
-                            locator.fallbacks.map(fallback => (
-                              <span key={`${locator.name}-${fallback}`} className="pill">
-                                {fallback}
+                          <div className="fallback-list">
+                            {(locator.fallbacks || []).map((fb, idx) => (
+                              <span key={`${locator.name}-fb-${idx}`} className="fallback-pill" title={fb}>
+                                {fb}
                               </span>
-                            ))
-                          ) : (
-                            <span className="muted">Sin alternativas</span>
-                          )}
+                            ))}
+                            {!locator.fallbacks?.length && <span className="fallback-pill muted">—</span>}
+                          </div>
                         </td>
                         <td>
-                          <span className="rationale" title={locator.rationale || 'Sin explicación disponible'}>
-                            Ver detalle
+                          <span className="rationale-pill" title={locator.rationale || 'Sin explicación disponible'}>
+                            Ver
                           </span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            ) : (
-              <p className="empty">Aún no se han generado localizadores IA.</p>
-            )}
-            {aiSavedAt && <p className="success-note">Se enviaron al Paso 1 para continuar con la generación.</p>}
+              ) : (
+                <p className="empty">Aún no hay resultados. Ingresa una fuente y ejecuta “Analizar (IA)”.</p>
+              )}
+            </div>
           </article>
 
-          <article className="panel-card">
-            <div className="panel-header">
-              <h2>Historias NL → Gherkin → Código</h2>
-              <p>Describe el flujo en lenguaje natural y convierte los escenarios para tu stack.</p>
+          <article className="card ai-card">
+            <div className="card-header">
+              <h2>Historias en lenguaje natural → Gherkin → Código</h2>
+              <p>Describe tu flujo, genera escenarios Gherkin editables y obtén el código usando las plantillas existentes.</p>
             </div>
+
             <label className="field">
               <span>Describe el flujo…</span>
               <textarea
-                value={requirementText}
-                onChange={e => setRequirementText(e.target.value)}
-                placeholder="Como usuario quiero iniciar sesión para consultar mi panel"
+                value={nlRequirement}
+                onChange={e => setNlRequirement(e.target.value)}
+                placeholder="Como usuario quiero iniciar sesión con mis credenciales válidas…"
+                rows={4}
               />
             </label>
-            <button className="primary" type="button" onClick={convertNlToGherkin} disabled={nlLoading}>
-              {nlLoading ? 'Generando Gherkin…' : 'Transformar a Gherkin'}
-            </button>
+
             {nlError && <div className="alert alert-error small">{nlError}</div>}
-            {(gherkinFeature || gherkinScenarios) && (
-              <div className="gherkin-editors">
-                <label className="field">
-                  <span>Feature ({gherkinSource || 'heurística/LLM'})</span>
-                  <textarea value={gherkinFeature} onChange={e => setGherkinFeature(e.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Scenarios</span>
-                  <textarea value={gherkinScenarios} onChange={e => setGherkinScenarios(e.target.value)} />
-                </label>
-              </div>
+
+            <button className="primary" onClick={generateGherkin} disabled={nlLoading}>
+              {nlLoading ? 'Generando…' : 'Generar Gherkin'}
+            </button>
+
+            {gherkinPreview && (
+              <label className="field">
+                <span>Escenarios Gherkin (editable)</span>
+                <textarea
+                  value={gherkinPreview}
+                  onChange={e => setGherkinPreview(e.target.value)}
+                  rows={10}
+                  className="gherkin-preview"
+                />
+              </label>
             )}
-            <div className="panel-meta-inline">
-              <span>Framework: {selectedFramework?.name || 'sin seleccionar'}</span>
-              <span>Patrón: {selectedPattern?.name || 'sin seleccionar'}</span>
+
+            <div className="mini-selectors">
+              <label className="field compact">
+                <span>Framework</span>
+                <select value={frameworkId} onChange={e => setFrameworkId(e.target.value)}>
+                  {templates.frameworks.map(framework => (
+                    <option key={framework.id} value={framework.id}>
+                      {framework.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field compact">
+                <span>Patrón</span>
+                <select value={patternId} onChange={e => setPatternId(e.target.value)}>
+                  {templates.patterns.map(pattern => (
+                    <option key={pattern.id} value={pattern.id}>
+                      {pattern.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
+
+            {codegenError && <div className="alert alert-error small">{codegenError}</div>}
+
             <button
               className="secondary"
-              type="button"
               onClick={generateCodeFromGherkin}
-              disabled={codeLoading || (!gherkinFeature && !gherkinScenarios)}
+              disabled={gherkinCodeLoading || !gherkinPreview}
             >
-              {codeLoading ? 'Preparando archivos…' : 'Generar código desde Gherkin'}
+              {gherkinCodeLoading ? 'Preparando…' : 'Generar código desde Gherkin'}
             </button>
-            {codeError && <div className="alert alert-error small">{codeError}</div>}
-            {codeFiles.length > 0 && (
-              <ul className="files-list">
-                {codeFiles.map(file => (
-                  <li key={file}>{file}</li>
-                ))}
-              </ul>
+
+            {!!gherkinFiles.length && (
+              <div className="gherkin-output">
+                <h3>Archivos generados (dry-run)</h3>
+                <ul>
+                  {gherkinFiles.map(file => (
+                    <li key={file.path || file}>{file.path || file}</li>
+                  ))}
+                </ul>
+                {gherkinSummary && (
+                  <p className="gherkin-summary">
+                    {gherkinSummary.framework} · {gherkinSummary.pattern} · Escenarios: {gherkinSummary.totalScenarios} · Pasos: {gherkinSummary.totalSteps}
+                  </p>
+                )}
+              </div>
             )}
           </article>
 
-          <article className="panel-card slim">
-            <div className="panel-header">
+          <article className="card ai-card">
+            <div className="card-header">
               <h2>Self-healing al ejecutar</h2>
-              <p>Configura si se intentará reemplazar selectores inestables durante las corridas.</p>
+              <p>Activa un intento automático de reparación cuando un selector falle durante la ejecución.</p>
             </div>
-            <label className={`toggle ${selfHealingEnabled ? 'enabled' : ''}`}>
+
+            <label className="toggle">
               <input
                 type="checkbox"
                 checked={selfHealingEnabled}
                 onChange={e => setSelfHealingEnabled(e.target.checked)}
               />
-              <span className="slider" />
-              <span className="toggle-label">Intentar self-healing si falla un selector</span>
+              <span>Intentar self-healing si falla un selector</span>
             </label>
-            <p className="muted">
-              {selfHealingEnabled
-                ? 'Se mostrará esta preferencia cuando ejecutes las suites. (Solo UI por ahora)'
-                : 'Puedes activarlo para guardar la preferencia. No realiza llamadas adicionales todavía.'}
-            </p>
+            <p className="hint">Cuando un selector falle, se propondrá un alterno usando el historial y podrás guardarlo.</p>
           </article>
         </section>
 
