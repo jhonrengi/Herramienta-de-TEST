@@ -35,6 +35,7 @@ export default function App() {
   const [codegenError, setCodegenError] = useState('')
   const [nlLoading, setNlLoading] = useState(false)
   const [gherkinCodeLoading, setGherkinCodeLoading] = useState(false)
+  const [gherkinExportLoading, setGherkinExportLoading] = useState(false)
   const [selfHealingEnabled, setSelfHealingEnabled] = useState(false)
 
   useEffect(() => {
@@ -67,107 +68,6 @@ export default function App() {
     () => templates.patterns.find(p => p.id === patternId),
     [templates.patterns, patternId]
   )
-
-  const scoreClass = score => {
-    if (score >= 0.9) return 'score-badge high'
-    if (score >= 0.75) return 'score-badge medium'
-    return 'score-badge low'
-  }
-
-  const analyzeWithAI = async () => {
-    setAiError('')
-    setAiSavedAt(null)
-    const trimmedHtml = aiHtml.trim()
-    const trimmedUrl = aiUrl.trim()
-    if (!trimmedHtml && !trimmedUrl) {
-      setAiError('Proporciona una URL o pega el HTML para analizar.')
-      return
-    }
-    const source = trimmedHtml
-      ? { type: 'html', value: trimmedHtml }
-      : { type: 'url', value: trimmedUrl }
-    setAiLoading(true)
-    try {
-      const res = await fetch(`${API}/api/locators/ai-extract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source })
-      })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        throw new Error(payload?.error || 'La extracción IA falló')
-      }
-      setAiLocators(payload?.locators || [])
-      setAiMeta(payload?.meta || null)
-    } catch (err) {
-      setAiError(err.message || 'Error al analizar con IA')
-      setAiLocators([])
-      setAiMeta(null)
-    } finally {
-      setAiLoading(false)
-    }
-  }
-
-  const convertNlToGherkin = async () => {
-    setNlError('')
-    setCodeError('')
-    setCodeFiles([])
-    if (!requirementText.trim()) {
-      setNlError('Describe el flujo para generar los escenarios.')
-      return
-    }
-    setNlLoading(true)
-    try {
-      const res = await fetch(`${API}/api/nl2gherkin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requirement: requirementText })
-      })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        throw new Error(payload?.error || 'No se pudo transformar el flujo a Gherkin')
-      }
-      setGherkinFeature(payload?.feature || '')
-      setGherkinScenarios(payload?.scenarios || '')
-      setGherkinSource(payload?.source || '')
-    } catch (err) {
-      setNlError(err.message || 'Error al generar Gherkin')
-    } finally {
-      setNlLoading(false)
-    }
-  }
-
-  const generateCodeFromGherkin = async () => {
-    setCodeError('')
-    setCodeFiles([])
-    if (!gherkinFeature.trim() && !gherkinScenarios.trim()) {
-      setCodeError('Completa el bloque Gherkin antes de generar código.')
-      return
-    }
-    setCodeLoading(true)
-    try {
-      const res = await fetch(`${API}/api/gherkin2code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feature: gherkinFeature,
-          scenarios: gherkinScenarios,
-          frameworkId,
-          patternId,
-          dryRun: true
-        })
-      })
-      const payload = await res.json().catch(() => null)
-      if (!res.ok) {
-        throw new Error(payload?.error || 'La generación de código aún no está disponible')
-      }
-      setCodeFiles(payload?.files || [])
-    } catch (err) {
-      setCodeError(err.message || 'Error al convertir Gherkin a código')
-    } finally {
-      setCodeLoading(false)
-    }
-  }
 
   const mockRecord = async () => {
     setStatus('recording')
@@ -338,6 +238,53 @@ export default function App() {
       setCodegenError(err.message || 'Error al generar código desde Gherkin')
     } finally {
       setGherkinCodeLoading(false)
+    }
+  }
+
+  const exportCodeFromGherkin = async () => {
+    const gherkin = gherkinPreview.trim()
+    if (!gherkin) {
+      setCodegenError('Genera o edita un Gherkin válido antes de exportar.')
+      return
+    }
+    if (!frameworkId || !patternId) {
+      setCodegenError('Selecciona framework y patrón para continuar.')
+      return
+    }
+
+    setGherkinExportLoading(true)
+    setCodegenError('')
+    try {
+      const res = await fetch(`${API}/api/gherkin2code/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          frameworkId,
+          patternId,
+          gherkin,
+          locators,
+          projectName,
+          format: 'zip'
+        })
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        throw new Error(payload?.error || 'No se pudo exportar el proyecto ZIP')
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const normalized = (projectName?.trim() ? projectName.trim() : 'autoqa-project').replace(/[^a-zA-Z0-9-_]+/g, '-')
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${normalized || 'autoqa-project'}.zip`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setCodegenError(err.message || 'Error al exportar el proyecto')
+    } finally {
+      setGherkinExportLoading(false)
     }
   }
 
@@ -541,13 +488,22 @@ export default function App() {
 
             {codegenError && <div className="alert alert-error small">{codegenError}</div>}
 
-            <button
-              className="secondary"
-              onClick={generateCodeFromGherkin}
-              disabled={gherkinCodeLoading || !gherkinPreview}
-            >
-              {gherkinCodeLoading ? 'Preparando…' : 'Generar código desde Gherkin'}
-            </button>
+            <div className="gherkin-actions">
+              <button
+                className="secondary"
+                onClick={generateCodeFromGherkin}
+                disabled={gherkinCodeLoading || !gherkinPreview}
+              >
+                {gherkinCodeLoading ? 'Preparando…' : 'Generar código desde Gherkin'}
+              </button>
+              <button
+                className="primary"
+                onClick={exportCodeFromGherkin}
+                disabled={gherkinExportLoading || !gherkinPreview}
+              >
+                {gherkinExportLoading ? 'Descargando…' : 'Exportar ZIP listo para ejecutar'}
+              </button>
+            </div>
 
             {!!gherkinFiles.length && (
               <div className="gherkin-output">
