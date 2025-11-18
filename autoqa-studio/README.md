@@ -85,7 +85,8 @@ Sin variables, el backend cae automáticamente en modo "solo plantillas".
 ### De Gherkin a código
 1. Elige la plantilla (framework y patrón) desde la sección **Codegen**.
 2. Proporciona los localizadores detectados o importados.
-3. Pulsa **Generar proyecto**. El servidor transforma el manifiesto Gherkin en archivos reales (por ejemplo, Playwright + POM) que quedan en `generated/`.
+3. Usa **Generar código desde Gherkin** para obtener una vista previa (_dry-run_) de los archivos que producirá la plantilla sin escribir en disco.
+4. Cuando estés conforme, pulsa **Exportar ZIP listo para ejecutar**. El backend llama a `POST /api/gherkin2code/export`, renderiza la plantilla completa y devuelve un `.zip` comprimido más la carpeta física bajo `generated/<nombre>-<timestamp>` para poder descargar o compartir la automatización.
 
 ### Fallback chain y self-healing
 - Si el modelo remoto falla o `LLM_PROVIDER=none`, la API usa una cadena de fallback: heurísticas → prompts comprimidos → respuestas cacheadas.
